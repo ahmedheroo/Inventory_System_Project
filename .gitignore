@@ -7,10 +7,7 @@
 *.user
 *.userosscache
 *.sln.docstates
-<<<<<<< HEAD
-=======
 *.env
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -23,7 +20,6 @@ mono_crash.*
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
-<<<<<<< HEAD
 x64/
 x86/
 [Ww][Ii][Nn]32/
@@ -31,7 +27,6 @@ x86/
 [Aa][Rr][Mm]64/
 bld/
 [Bb]in/
-=======
 
 [Dd]ebug/x64/
 [Dd]ebugPublic/x64/
@@ -47,26 +42,18 @@ obj/x64/
 bin/x86/
 obj/x86/
 
-[Ww][Ii][Nn]32/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
 [Aa][Rr][Mm]64[Ee][Cc]/
-bld/
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 [Oo]bj/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
 
-<<<<<<< HEAD
-=======
 # Build results on 'Bin' directories
 **/[Bb]in/*
 # Uncomment if you have tasks that rely on *.refresh files to move binaries
 # (https://github.com/github/gitignore/pull/3736)
 #!**/[Bb]in/*.refresh
 
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 # Visual Studio 2015/2017 cache/options directory
 .vs/
 # Uncomment if you have tasks that create the project's static files in wwwroot
@@ -78,22 +65,16 @@ Generated\ Files/
 # MSTest test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
-<<<<<<< HEAD
-=======
 *.trx
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 
 # NUnit
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
 
-<<<<<<< HEAD
-=======
 # Approval Tests result files
 *.received.*
 
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 # Build Results of an ATL Project
 [Dd]ebugPS/
 [Rr]eleasePS/
@@ -106,10 +87,7 @@ BenchmarkDotNet.Artifacts/
 project.lock.json
 project.fragment.lock.json
 artifacts/
-<<<<<<< HEAD
-=======
 .artifacts/
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
@@ -124,10 +102,7 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
-<<<<<<< HEAD
-=======
 *.idb
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 *.iobj
 *.pch
 *.pdb
@@ -135,11 +110,8 @@ StyleCopReport.xml
 *.pgc
 *.pgd
 *.rsp
-<<<<<<< HEAD
-=======
 # but not Directory.Build.rsp, as it configures directory-level build defaults
 !Directory.Build.rsp
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 *.sbr
 *.tlb
 *.tli
@@ -148,10 +120,7 @@ StyleCopReport.xml
 *.tmp_proj
 *_wpftmp.csproj
 *.log
-<<<<<<< HEAD
-=======
 *.tlog
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 *.vspscc
 *.vssscc
 .builds
@@ -214,10 +183,7 @@ coverage*.info
 
 # NCrunch
 _NCrunch_*
-<<<<<<< HEAD
-=======
 .NCrunch_*
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 .*crunch*.local.xml
 nCrunchTemp_*
 
@@ -359,17 +325,12 @@ node_modules/
 # Visual Studio 6 auto-generated workspace file (contains which files were open etc.)
 *.vbw
 
-<<<<<<< HEAD
-=======
 # Visual Studio 6 workspace and project file (working project files containing files to include in project)
 *.dsw
 *.dsp
 
 # Visual Studio 6 technical files
-*.ncb
-*.aps
 
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 # Visual Studio LightSwitch build output
 **/*.HTMLClient/GeneratedArtifacts
 **/*.DesktopClient/GeneratedArtifacts
@@ -379,7 +340,6 @@ node_modules/
 _Pvt_Extensions
 
 # Paket dependency manager
-<<<<<<< HEAD
 .paket/paket.exe
 paket-files/
 
@@ -396,24 +356,16 @@ __pycache__/
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
-=======
 **/.paket/paket.exe
-paket-files/
 
-# FAKE - F# Make
 **/.fake/
 
-# CodeRush personal settings
 **/.cr/personal
 
-# Python Tools for Visual Studio (PTVS)
 **/__pycache__/
-*.pyc
 
-# Cake - Uncomment if you are using it
 #tools/**
 #!tools/packages.config
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 
 # Tabs Studio
 *.tss
@@ -435,32 +387,25 @@ ASALocalRun/
 
 # MSBuild Binary and Structured Log
 *.binlog
-<<<<<<< HEAD
-=======
 MSBuild_Logs/
 
 # AWS SAM Build and Temporary Artifacts folder
 .aws-sam
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 
 # NVidia Nsight GPU debugger configuration file
 *.nvuser
 
 # MFractors (Xamarin productivity tool) working folder
-<<<<<<< HEAD
 .mfractor/
 
 # Local History for Visual Studio
 .localhistory/
-=======
 **/.mfractor/
 
-# Local History for Visual Studio
 **/.localhistory/
 
 # Visual Studio History (VSHistory) files
 .vshistory/
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
 
 # BeatPulse healthcheck temp database
 healthchecksdb
@@ -469,16 +414,12 @@ healthchecksdb
 MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
-<<<<<<< HEAD
 .ionide/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-=======
 **/.ionide/
 
-# Fody - auto-generated XML schema
-FodyWeavers.xsd
 
 # VS Code files for those working on multiple tools
 .vscode/*
@@ -500,4 +441,11 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
->>>>>>> ba2e7f203eb63a2fd76315eb9e19d0b6b572fa0c
+
+# ---- Inventory System: project-specific ----
+# Local SQLite dev fallback database files
+*.db
+*.db-shm
+*.db-wal
+# Local tool/editor state
+.freebuff/
