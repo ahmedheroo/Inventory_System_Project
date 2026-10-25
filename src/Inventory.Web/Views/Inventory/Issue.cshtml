@@ -1,0 +1,43 @@
+@model IssueStockForm
+
+@{
+    var products = Pickers.Products(Model.Catalog, selected: Model.ProductId > 0 ? Model.ProductId : null, emptyLabel: "Choose a product");
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.WarehouseId > 0 ? Model.WarehouseId : null, emptyLabel: "Choose a warehouse");
+}
+
+@section Actions {
+    <a class="btn btn--quiet" href="/inventory/receive">Receive instead</a>
+    <a class="btn btn--quiet" href="/inventory/transfer">Transfer instead</a>
+}
+
+<section>
+    <form class="form-panel" method="post" asp-controller="Inventory" asp-action="Issue">
+        <h3>Issue stock</h3>
+
+        <div class="validation-summary" asp-validation-summary="All"></div>
+
+        <div class="form-grid">
+            <partial name="_Select" model="products" />
+            <partial name="_Select" model="warehouses" />
+
+            <div class="field">
+                <label for="Quantity">Quantity</label>
+                <input id="Quantity" name="Quantity" type="number" min="1" step="1" value="@Model.Quantity" required />
+                <span class="field__hint">Whole units. An issue larger than the level on hand is refused by the service.</span>
+                <span class="field__error">@Html.ValidationMessage("Quantity")</span>
+            </div>
+
+            <div class="field">
+                <label for="Reference">Reference</label>
+                <input id="Reference" name="Reference" type="text" value="@Model.Reference" maxlength="200" placeholder="Order, customer or reason" />
+                <span class="field__hint">Written into the movement ledger.</span>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Issue stock</button>
+            <a class="btn btn--quiet" href="/inventory">Back to stock levels</a>
+            <span class="hint-inline">A refused issue is shown above with what the service reported.</span>
+        </div>
+    </form>
+</section>

@@ -1,0 +1,32 @@
+@model StockListViewModel
+
+@{
+    ViewData["Title"] = "Stock levels";
+}
+
+@section Actions {
+    @* Moving stock is the dock's work: the operations are offered to a role that may perform them. *@
+    @if (User.CanOperate())
+    {
+        <a class="btn" href="/inventory/receive">Receive</a>
+        <a class="btn btn--quiet" href="/inventory/issue">Issue</a>
+        <a class="btn btn--quiet" href="/inventory/transfer">Transfer</a>
+        <a class="btn btn--quiet" href="/inventory/adjust">Adjust</a>
+    }
+}
+
+@*
+    The levels are a live region: /live/levels is re-read whenever the Inventory hub says a
+    level moved, with the query string this page is currently showing — so a refresh keeps
+    the filters, the page and the focus of the person in front of it. Rows carry the product
+    and warehouse they belong to, which is how the changed row is pointed at after a refresh.
+*@
+<div class="live-region"
+     data-live="page"
+     data-live-source="/live/levels"
+     data-live-query="true"
+     data-live-stamp="true"
+     aria-live="polite"
+     aria-busy="false">
+    <partial name="_Levels" model="Model" />
+</div>

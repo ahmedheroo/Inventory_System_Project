@@ -1,0 +1,30 @@
+@model SelectModel
+
+@{
+    var invalid = ViewData.ModelState.TryGetValue(Model.FieldName, out var entry) && entry.Errors.Count > 0;
+}
+
+<div class="field">
+    <label for="@Model.Id">@Model.Label</label>
+    <select id="@Model.Id" name="@Model.FieldName" aria-invalid="@(invalid ? "true" : null)" required="@(Model.Required ? "required" : null)">
+        @if (Model.EmptyLabel is not null)
+        {
+            <option value="">@Model.EmptyLabel</option>
+        }
+        @foreach (var option in Model.Options)
+        {
+            if (Model.Selected == option.Value)
+            {
+                <option value="@option.Value" selected="selected">@option.Label</option>
+            }
+            else
+            {
+                <option value="@option.Value">@option.Label</option>
+            }
+        }
+    </select>
+    @if (!string.IsNullOrWhiteSpace(Model.Hint))
+    {
+        <span class="field__hint">@Model.Hint</span>
+    }
+</div>

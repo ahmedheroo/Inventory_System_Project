@@ -1,0 +1,236 @@
+@model DashboardViewModel
+
+<section>
+    <div class="readout">
+        <div class="readout__item">
+            <p class="readout__label">Stock value</p>
+            <p class="readout__value">@Display.Money(Model.Value.TotalValue)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units on hand</p>
+            <p class="readout__value">@Display.Quantity(Model.Value.TotalQuantity)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Stock levels</p>
+            <p class="readout__value">
+                @Display.Quantity(Model.Value.StockLevelCount)
+                <small>@Model.Value.ProductCount products in @Model.Value.WarehouseCount warehouses</small>
+            </p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Below minimum</p>
+            <p class="readout__value readout__value--attention">
+                @Display.Quantity(Model.Shortages.LowStockCount)
+                <small>@Display.Quantity(Model.Shortages.AffectedProducts) products</small>
+            </p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Out of stock</p>
+            <p class="readout__value readout__value--critical">
+                @Display.Quantity(Model.Shortages.OutOfStockCount)
+                <small>@Display.Quantity(Model.Shortages.TotalShortfall) units short in total</small>
+            </p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Open alerts</p>
+            <p class="readout__value">
+                @Display.Quantity(Model.OpenAlertCount)
+                <small><a href="/alerts">review</a></small>
+            </p>
+        </div>
+    </div>
+</section>
+
+<section>
+    <div class="section-head">
+        <h2>Position by warehouse</h2>
+        <p class="meta">Lowest positions first, each bar a quantity against the product's minimum.</p>
+    </div>
+
+    @if (Model.Positions.Count == 0)
+    {
+        <div class="empty">
+            <strong>No warehouses yet</strong>
+            A warehouse is where stock lives. <a href="/warehouses">Create the first one</a> to start receiving stock.
+        </div>
+    }
+    else
+    {
+        <div class="board">
+            @foreach (var position in Model.Positions)
+            {
+                <div class="board__col">
+                    <p class="board__name">
+                        <b>@position.Warehouse.Name</b>
+                        <span class="id">@position.Warehouse.Code</span>
+                    </p>
+                    <p class="board__totals">
+                        <b>@Display.Quantity(position.Total?.Quantity ?? 0)</b> units ·
+                        <b>@Display.Money(position.Total?.Value ?? 0m)</b> value
+                        @if (!position.Warehouse.IsActive)
+                        {
+                            <span class="state state--muted">inactive</span>
+                        }
+                    </p>
+
+                    @if (position.Shortest.Count == 0)
+                    {
+                        <p class="meta">Nothing below its minimum.</p>
+                    }
+                    else
+                    {
+                        @foreach (var row in position.Shortest)
+                        {
+                            <div class="fill fill--@Display.ShortageTone(row.Status)">
+                                <span class="fill__name" title="@row.Sku · @row.ProductName">@row.Sku · @row.ProductName</span>
+                                <span class="fill__bar"><span style="width:@(Display.FillPercent(row.Quantity, row.MinimumStockLevel))%"></span></span>
+                                <span class="fill__qty">@Display.Quantity(row.Quantity)/@Display.Quantity(row.MinimumStockLevel)</span>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<section>
+    <div class="section-head">
+        <h2>Needs attention now</h2>
+        <p class="meta"><a href="/reports/low-stock">The full short-stock report</a> covers every affected product and warehouse.</p>
+    </div>
+
+    @if (Model.ShortStock.Count == 0)
+    {
+        <div class="empty">
+            <strong>Nothing is below its minimum</strong>
+            Every stock level is at or above the minimum its product asks for.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">On hand</th>
+                        <th scope="col" class="num">Minimum</th>
+                        <th scope="col" class="num">Short by</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Act</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.ShortStock)
+                    {
+                        <tr>
+                            <td class="id">@row.Sku</td>
+                            <td>@row.ProductName</td>
+                            <td>@row.WarehouseName</td>
+                            <td class="num">@Display.Quantity(row.Quantity)</td>
+                            <td class="num">@Display.Quantity(row.MinimumStockLevel)</td>
+                            <td class="num">@Display.Quantity(row.Shortfall)</td>
+                            <td><span class="state state--@Display.ShortageTone(row.Status)">@Display.ShortageName(row.Status)</span></td>
+                            <td>
+                                @if (User.CanOperate())
+                                {
+                                    <a href="/inventory/receive?productId=@row.ProductId&amp;warehouseId=@row.WarehouseId" class="btn btn--quiet btn--small">Receive</a>
+                                }
+                                else
+                                {
+                                    <a href="/inventory?productId=@row.ProductId" class="btn--link">Stock</a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<div class="split">
+    <section>
+        <div class="section-head">
+            <h2>Last movements</h2>
+            <p class="meta"><a href="/inventory/history">The whole ledger</a></p>
+        </div>
+
+        @if (Model.RecentMovements.Count == 0)
+        {
+            <div class="empty">
+                <strong>No movements recorded</strong>
+                Receipts, issues, transfers and counts appear here as the Inventory service records them.
+            </div>
+        }
+        else
+        {
+            <div class="table-frame">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th scope="col">When (UTC)</th>
+                            <th scope="col">Movement</th>
+                            <th scope="col">Product</th>
+                            <th scope="col">Warehouse</th>
+                            <th scope="col" class="num">Change</th>
+                            <th scope="col" class="num">After</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var movement in Model.RecentMovements)
+                        {
+                            <tr>
+                                <td class="id">@Display.Timestamp(movement.OccurredAt)</td>
+                                <td>@Display.MovementName(movement.Type)</td>
+                                <td>
+                                    <span class="grid__name">@movement.Sku · @movement.ProductName</span>
+                                </td>
+                                <td>@movement.WarehouseName</td>
+                                <td class="num delta delta--@Display.MovementTone(movement.Type)">@Display.Signed(movement.SignedQuantity)</td>
+                                <td class="num">@Display.Quantity(movement.QuantityAfter)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section>
+        <div class="section-head">
+            <h2>Open alerts</h2>
+            <p class="meta"><a href="/alerts">All alerts</a></p>
+        </div>
+
+        @if (Model.OpenAlerts.Count == 0)
+        {
+            <div class="empty">
+                <strong>No open alerts</strong>
+                The Alert service raises one as soon as stock reaches a product's minimum.
+            </div>
+        }
+        else
+        {
+            <div class="table-frame">
+                <ul class="notes">
+                    @foreach (var alert in Model.OpenAlerts)
+                    {
+                        <li>
+                            <span class="state state--@Display.AlertTone(alert.Type)">@Display.AlertName(alert.Type)</span>
+                            <span>@Model.Catalog.ProductName(alert.ProductId)</span>
+                            <span class="grid__sub">
+                                @Model.Catalog.WarehouseName(alert.WarehouseId) ·
+                                @Display.Quantity(alert.CurrentQuantity) against a minimum of @Display.Quantity(alert.MinimumStockLevel)
+                            </span>
+                            <span class="notes__when">@Display.Timestamp(alert.CreatedAt)</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </section>
+</div>

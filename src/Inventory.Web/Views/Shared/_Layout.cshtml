@@ -1,49 +1,146 @@
-﻿<!DOCTYPE html>
+@inject Inventory.Web.Services.IStation Station
+@{
+    var nav = ViewData["Nav"] as string;
+    var sectionName = ViewData["Section"] as string ?? "Inventory MS";
+    var note = ViewData["Note"] as string;
+    var message = Flash.Message(TempData);
+    var tone = Flash.Tone(TempData);
+    var signedIn = User.Identity?.IsAuthenticated == true;
+
+    string Active(string key) => nav == key ? "rail__link is-active" : "rail__link";
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Inventory.Web</title>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/Inventory.Web.styles.css" asp-append-version="true" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] ?? "Overview") · Inventory MS</title>
+    <link rel="stylesheet" href="~/css/console.css" asp-append-version="true" />
 </head>
-<body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">Inventory.Web</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-                        </li>
-                    </ul>
+@* The live view a signed-in page follows is this console's own hub (@LiveHub.Path) — not the
+   Inventory service's. That service's hub needs a token, which the console's relay holds and a
+   browser never sees; this hub needs the session cookie, which the browser already has. The station
+   still travels with every page, so a screen can tell its own movements from another terminal's.
+   Nothing here is required for a page to render: without JavaScript, or with the hub unreachable,
+   every screen still works and simply does not refresh itself. *@
+<body class="console@(signedIn ? null : " console--signed-out")"
+      data-live-hub="@(signedIn ? LiveHub.Path : null)"
+      data-live-station="@(signedIn ? Station.Id : null)">
+    @if (signedIn)
+    {
+        <nav class="rail" aria-label="Console sections">
+            <div class="rail__brand">
+                <b>Inventory</b>
+                <span>Management System</span>
+            </div>
+
+            <div class="rail__group">
+                <a class="@Active("overview")" href="/">Overview</a>
+            </div>
+
+            <div class="rail__group">
+                <p class="rail__label">Signals</p>
+                <a class="@Active("alerts")" href="/alerts">Alerts</a>
+
+                @* The count is live on every screen: it is the one number a person watches
+                   without being on the screen it belongs to. *@
+                <div class="rail__attention"
+                     data-live="attention"
+                     data-live-source="/live/attention"
+                     data-live-poll="20000"
+                     aria-live="polite">
+                    @await Component.InvokeAsync("AttentionBadge")
                 </div>
             </div>
+
+            <div class="rail__group">
+                <p class="rail__label">Catalogue</p>
+                <a class="@Active("products")" href="/products">Products</a>
+                <a class="@Active("categories")" href="/categories">Categories</a>
+                <a class="@Active("warehouses")" href="/warehouses">Warehouses</a>
+            </div>
+
+            <div class="rail__group">
+                <p class="rail__label">Stock</p>
+                <a class="@Active("levels")" href="/inventory">Levels</a>
+                <a class="@Active("history")" href="/inventory/history">Movement ledger</a>
+            </div>
+
+            @* Operations are the dock's work, so the rail only offers them to a role that may
+               perform them. A viewer who typed the address is turned away by the action itself. *@
+            @if (User.CanOperate())
+            {
+                <div class="rail__group">
+                    <p class="rail__label">Operations</p>
+                    <a class="@Active("receive")" href="/inventory/receive">Receive</a>
+                    <a class="@Active("issue")" href="/inventory/issue">Issue</a>
+                    <a class="@Active("transfer")" href="/inventory/transfer">Transfer</a>
+                    <a class="@Active("adjust")" href="/inventory/adjust">Adjust</a>
+                </div>
+            }
+
+            <div class="rail__group">
+                <p class="rail__label">Analysis</p>
+                <a class="@Active("reports")" href="/reports/inventory">Reports</a>
+            </div>
+
+            <div class="rail__meta">
+                @* Who is signed in, on every screen: the answer to "why can I not do that" is
+                   usually the role beside this name. *@
+                <div class="rail__who">
+                    <p class="rail__label">Signed in</p>
+                    <p class="rail__user">@User.SignedInAs()</p>
+                    <p class="rail__role">@User.RoleLabel() · @User.Identity!.Name</p>
+
+                    @* The action's name is SignOut, not the method's SignOutAsync: the suffix is
+                       trimmed when the action is named, and asking for the method's spelling made
+                       URL generation fall back to a conventional route — /Account/SignOutAsync,
+                       which is no screen at all. *@
+                    <form method="post" asp-controller="Account" asp-action="SignOut">
+                        <button type="submit" class="btn btn--quiet btn--small">Sign out</button>
+                    </form>
+                </div>
+
+                @* Filled by the live client, and left out entirely when there is no client:
+                   a person should know whether what they are looking at moves on its own. *@
+                <p class="rail__live-state" data-live-state hidden></p>
+            </div>
         </nav>
-    </header>
-    <div class="container">
-        <main role="main" class="pb-3">
+    }
+
+    <div class="shell">
+        <header class="band">
+            <div>
+                <p class="band__crumb">@sectionName</p>
+                <h1>@(ViewData["Title"] ?? "Overview")</h1>
+                @if (!string.IsNullOrWhiteSpace(note))
+                {
+                    <p class="band__note">@note</p>
+                }
+
+                <p class="band__stamp" data-live-stamp role="status" hidden></p>
+            </div>
+            <div class="band__actions">
+                @await RenderSectionAsync("Actions", required: false)
+            </div>
+        </header>
+
+        <main class="page">
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <p class="flash flash--@(tone == Flash.Confirmed ? "ok" : "attention")" role="status">@message</p>
+            }
+
             @RenderBody()
         </main>
     </div>
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 - Inventory.Web - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-        </div>
-    </footer>
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @if (signedIn)
+    {
+        <script src="~/lib/signalr/signalr.min.js" asp-append-version="true"></script>
+        <script src="~/js/live.js" asp-append-version="true"></script>
+    }
+
     <script src="~/js/site.js" asp-append-version="true"></script>
-    @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

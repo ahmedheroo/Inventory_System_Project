@@ -1,0 +1,1151 @@
+/* ===========================================================================
+   Inventory control console — the design system.
+   One stylesheet for every screen: tokens, shell, tables, forms, states.
+   The brief, its tokens and its rejected directions live in docs/web-ui.md.
+   =========================================================================== */
+
+:root {
+  --ink: #131A20;
+  --ink-soft: #2A3641;
+  --canvas: #E9EDF1;
+  --surface: #FFFFFF;
+  --surface-alt: #F4F7F9;
+  --rule: #C8D1DA;
+  --rule-soft: #DFE6EC;
+  --slate: #59636E;
+  --amber: #B26A0C;
+  --amber-wash: #FBF5EC;
+  --signal: #A32B21;
+  --signal-wash: #FBF1F0;
+  --verdigris: #1D6A63;
+  --verdigris-wash: #F1F7F6;
+  --ui: "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "SF Mono", "Liberation Mono", monospace;
+  --rail-width: 232px;
+  --content-width: 1440px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--ui);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--canvas);
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  align-items: start;
+}
+
+a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--verdigris);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 22px;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+h3 {
+  font-size: 15px;
+}
+
+p {
+  margin: 0 0 10px;
+  max-width: 76ch;
+}
+
+code,
+.id {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta,
+figcaption {
+  color: var(--slate);
+  font-size: 12.5px;
+}
+
+/* --------------------------------------------------------------- rail ---- */
+
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ink);
+  color: #DEE4E9;
+  overflow-y: auto;
+}
+
+.rail__brand {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.rail__brand b {
+  display: block;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rail__brand span {
+  color: #8D9BA8;
+  font-size: 11.5px;
+}
+
+.rail__group {
+  padding-top: 12px;
+}
+
+.rail__label {
+  padding: 0 18px 5px;
+  color: #8493A0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rail__link {
+  display: block;
+  padding: 5px 18px;
+  border-left: 3px solid transparent;
+  color: #DEE4E9;
+  font-size: 13.5px;
+  text-decoration: none;
+}
+
+.rail__link:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #FFFFFF;
+}
+
+.rail__link.is-active {
+  border-left-color: var(--amber);
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.rail__link:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: -2px;
+}
+
+.rail__meta {
+  margin-top: auto;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: #8493A0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ----------------------------------------------------------- page band --- */
+
+.band {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 28px 14px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--canvas);
+}
+
+.band__crumb {
+  color: var(--slate);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.band__note {
+  margin: 3px 0 0;
+  color: var(--slate);
+}
+
+.band__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-width);
+  padding: 18px 28px 56px;
+}
+
+.page > section {
+  margin-bottom: 26px;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+/* -------------------------------------------------------------- flash ---- */
+
+.flash {
+  margin: 0 0 16px;
+  padding: 9px 14px;
+  border: 1px solid var(--rule);
+  border-left-width: 4px;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.flash--ok {
+  border-color: #A6C6C2;
+  border-left-color: var(--verdigris);
+  color: var(--verdigris);
+  background: var(--verdigris-wash);
+}
+
+.flash--attention {
+  border-color: #E2C296;
+  border-left-color: var(--amber);
+  color: var(--amber);
+  background: var(--amber-wash);
+}
+
+/* ------------------------------------------------------------ readout ---- */
+
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.readout__item {
+  flex: 1 1 150px;
+  padding: 9px 16px;
+  border-right: 1px solid var(--rule-soft);
+}
+
+.readout__item:last-child {
+  border-right: 0;
+}
+
+.readout__label {
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.readout__value {
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.readout__value--attention {
+  color: var(--amber);
+}
+
+.readout__value--critical {
+  color: var(--signal);
+}
+
+.readout__value small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--slate);
+}
+
+/* ----------------------------------------------------- position board ---- */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.board__col {
+  padding: 13px 16px 16px;
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.board__name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board__name b {
+  font-size: 14.5px;
+}
+
+.board__totals {
+  margin: 6px 0 10px;
+  color: var(--slate);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.board__totals b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.fill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px 54px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+
+.fill__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fill__bar {
+  height: 6px;
+  background: #E3E9EE;
+}
+
+.fill__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--verdigris);
+}
+
+.fill__qty {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fill--attention .fill__bar > span {
+  background: var(--amber);
+}
+
+.fill--attention .fill__qty {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.fill--critical .fill__bar > span {
+  background: var(--signal);
+}
+
+.fill--critical .fill__qty {
+  color: var(--signal);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------- tabs ---- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tabs a {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  color: var(--slate);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tabs a:hover {
+  color: var(--ink);
+}
+
+.tabs a.is-active {
+  margin-bottom: -1px;
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------- tables ---- */
+
+.table-frame {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  /* A wide ledger scrolls inside its frame on a narrow screen; the page itself
+     never scrolls sideways. */
+  overflow-x: auto;
+}
+
+.grid {
+  min-width: 100%;
+}
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.grid caption {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--slate);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.grid th,
+.grid td {
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.grid thead th {
+  background: var(--surface-alt);
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.grid tbody tr:hover {
+  background: #F7FAFB;
+}
+
+.grid tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.grid tfoot td {
+  border-top: 1px solid var(--rule);
+  border-bottom: 0;
+  background: var(--surface-alt);
+  font-weight: 600;
+}
+
+.grid tbody tr.is-target {
+  outline: 2px solid var(--amber);
+  outline-offset: -2px;
+}
+
+.grid__name {
+  display: block;
+  font-weight: 600;
+}
+
+.grid__sub {
+  display: block;
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+}
+
+.state--ok {
+  color: var(--verdigris);
+}
+
+.state--attention {
+  color: var(--amber);
+}
+
+.state--critical {
+  color: var(--signal);
+}
+
+.state--muted {
+  color: var(--slate);
+  font-weight: 400;
+}
+
+.delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.delta--up {
+  color: var(--verdigris);
+}
+
+.delta--down {
+  color: var(--signal);
+}
+
+/* -------------------------------------------------------------- forms ---- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.filters .field {
+  max-width: 230px;
+}
+
+.filters__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field > label {
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="search"],
+select,
+textarea {
+  padding: 6px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--ink-soft);
+  outline-offset: -1px;
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--signal);
+}
+
+.field__hint {
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.field__error,
+.field-validation-error {
+  color: var(--signal);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.validation-summary-valid {
+  display: none;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px 20px;
+  max-width: 900px;
+  margin-bottom: 18px;
+}
+
+.form-grid .field--wide {
+  grid-column: 1 / -1;
+}
+
+.form-panel {
+  padding: 16px 18px 18px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  max-width: 940px;
+}
+
+.form-panel > h3 {
+  margin-bottom: 2px;
+}
+
+.form-panel > .meta {
+  margin-bottom: 14px;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 8px 0;
+}
+
+.check {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.check input {
+  margin: 0;
+}
+
+.validation-summary {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--signal);
+  border-left-width: 4px;
+  background: var(--signal-wash);
+  color: var(--signal);
+  list-style: none;
+}
+
+.validation-summary:empty {
+  display: none;
+}
+
+.validation-summary li {
+  font-weight: 600;
+}
+
+.btn {
+  display: inline-block;
+  padding: 6px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: var(--ink);
+  color: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
+  color: #FFFFFF;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+
+.btn--quiet {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.btn--quiet:hover {
+  background: var(--surface-alt);
+  color: var(--ink);
+  border-color: var(--slate);
+}
+
+.btn--critical {
+  background: var(--surface);
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.btn--critical:hover {
+  background: var(--signal-wash);
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.btn--small {
+  padding: 3px 9px;
+  font-size: 12.5px;
+}
+
+.btn--link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn--link:hover {
+  background: none;
+  color: var(--verdigris);
+}
+
+.actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.actions-cell form {
+  display: inline;
+}
+
+/* -------------------------------------------------------------- pager ---- */
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+  color: var(--slate);
+  font-size: 12.5px;
+}
+
+.pager__links {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.pager strong {
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------ lists and notes --- */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes li {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.notes li:last-child {
+  border-bottom: 0;
+}
+
+.notes__when {
+  color: var(--slate);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: 22px 20px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--slate);
+}
+
+.empty strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.empty a {
+  font-weight: 600;
+}
+
+.lede {
+  font-size: 15px;
+  max-width: 76ch;
+}
+
+.hint-inline {
+  color: var(--slate);
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------------- sign-in --- */
+
+/* Signed out, there is no rail: a person who is not signed in has no sections to be shown.
+   The single column is what stops the shell from being pushed off the left of the screen. */
+body.console--signed-out {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.signin {
+  max-width: 520px;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--rule);
+  border-left: 5px solid var(--ink);
+  background: var(--surface);
+}
+
+.signin h2 {
+  margin-bottom: 6px;
+}
+
+.signin .form-panel {
+  margin-top: 16px;
+  border: 0;
+  padding: 0;
+  max-width: none;
+}
+
+.signin .hint-inline {
+  display: block;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+/* Who is signed in, at the foot of the rail: the answer to "why can I not do that" is
+   almost always the role beside this name. */
+.rail__who {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.rail__user {
+  margin: 0;
+  padding: 0 18px;
+  color: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.rail__role {
+  margin: 1px 0 10px;
+  padding: 0 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.rail__who form {
+  margin: 0;
+  padding: 0 18px;
+}
+
+/* ---------------------------------------------------- service failures --- */
+
+.fault {
+  max-width: 640px;
+  padding: 22px 24px;
+  border: 1px solid var(--signal);
+  border-left-width: 5px;
+  background: var(--surface);
+}
+
+.fault h2 {
+  margin-bottom: 6px;
+}
+
+.fault__status {
+  margin-top: 14px;
+  color: var(--slate);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------- live updates ---- */
+
+/* The wrapper around a region the browser re-reads on its own. It carries no styling of
+   its own: the markup inside it is the markup the page was rendered from, so a refreshed
+   region cannot look like a different screen. */
+
+.live-region > section {
+  margin-bottom: 26px;
+}
+
+/* When the region was last re-read, said in the console's voice. It is a sentence, not a
+   badge — and when a refresh fails it says so here, where the reading happens. */
+.band__stamp {
+  margin: 5px 0 0;
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.band__stamp.is-failed {
+  color: var(--signal);
+}
+
+/* A row that moved while the page was open. The highlight fades: it answers "what just
+   happened", and a permanent marker would read as another kind of state.
+
+   Two of them, because on a shared terminal the two are different news: the amber wash is a
+   movement by somebody else (attention), the verdigris wash is your own movement confirmed
+   (confirmed). Same motion, same duration — only the meaning of the colour differs, and it is
+   said in words in the page band as well. */
+.grid tbody tr.is-changed {
+  animation: changed-row 2.6s ease-out;
+}
+
+.grid tbody tr.is-mine {
+  animation: confirmed-row 2.6s ease-out;
+}
+
+@keyframes changed-row {
+  from {
+    background: var(--amber-wash);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@keyframes confirmed-row {
+  from {
+    background: var(--verdigris-wash);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+/* The rail's alert count, under the Alerts link. It uses the console's own state colours —
+   the square marker and the words carry the meaning — but they are re-set here to values
+   that can be read on --ink: the paper tones are far too dark for the rail. */
+.rail__attention {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #DEE4E9;
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.rail__attention:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #FFFFFF;
+}
+
+.rail__attention:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: -2px;
+}
+
+.rail__attention-count {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail__attention-label {
+  color: #C3CCD5;
+  line-height: 1.35;
+}
+
+.rail__attention-label small {
+  display: block;
+  color: #9AA7B4;
+  font-size: 11px;
+}
+
+.rail .state--ok {
+  color: #8FC9C2;
+}
+
+.rail .state--attention {
+  color: #E8B66B;
+}
+
+.rail .state--critical {
+  color: #F0A29A;
+}
+
+.rail .state--muted {
+  color: #9AA7B4;
+}
+
+.rail__live-state {
+  margin: 8px 0 0;
+  color: #9AA7B4;
+}
+
+.rail__live-state.is-live {
+  color: #8FC9C2;
+}
+
+.rail__live-state.is-off {
+  color: #F0A29A;
+}
+
+/* ---------------------------------------------------------- responsive --- */
+
+@media (max-width: 1024px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rail {
+    position: static;
+    height: auto;
+  }
+
+  .rail__meta {
+    margin-top: 12px;
+  }
+
+  .band {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+  }
+
+  .page {
+    padding: 14px 18px 44px;
+  }
+}
+
+@media print {
+  body {
+    display: block;
+    background: #FFFFFF;
+  }
+
+  .rail,
+  .band__actions,
+  .band__stamp,
+  .filters,
+  .pager,
+  .btn,
+  .flash {
+    display: none !important;
+  }
+
+  .page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .grid th,
+  .grid td {
+    border-color: #999999;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

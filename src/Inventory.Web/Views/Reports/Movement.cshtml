@@ -1,0 +1,133 @@
+@model MovementReportViewModel
+
+@{
+    var products = Pickers.Products(Model.Catalog, selected: Model.Filters.ProductId);
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.Filters.WarehouseId);
+    var movements = new SelectModel
+    {
+        FieldName = "type",
+        Label = "Movement",
+        Options = Pickers.MovementTypes,
+        Selected = (int?)Model.Filters.Type,
+        EmptyLabel = "All movements"
+    };
+}
+
+@section Actions {
+    <a class="btn" href="@Model.Filters.DownloadUrl("movement", "csv")">Download CSV</a>
+    <a class="btn btn--quiet" href="@Model.Filters.DownloadUrl("movement", "xlsx")">Download Excel</a>
+    <button type="button" class="btn btn--quiet" onclick="window.print()">Print</button>
+}
+
+<partial name="_ReportTabs" model="@("movement")" />
+
+<section>
+    <form class="filters" method="get" asp-controller="Reports" asp-action="Movement">
+        <partial name="_Select" model="products" />
+        <partial name="_Select" model="warehouses" />
+        <partial name="_Select" model="movements" />
+
+        <div class="field">
+            <label for="f-from">From</label>
+            <input id="f-from" type="date" name="from" value="@Display.DateInput(Model.Filters.From)" />
+        </div>
+
+        <div class="field">
+            <label for="f-to">To</label>
+            <input id="f-to" type="date" name="to" value="@Display.DateInput(Model.Filters.To)" />
+            <span class="field__hint">Includes the whole day.</span>
+        </div>
+
+        <input type="hidden" name="pageSize" value="@Model.Filters.PageSize" />
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/reports/movement">Clear</a>
+        </span>
+    </form>
+
+    <div class="readout">
+        <div class="readout__item">
+            <p class="readout__label">Movements</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalMovements)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units received</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalReceived)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units issued</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalIssued)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units transferred</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalTransferred)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Counted up / down</p>
+            <p class="readout__value">
+                @Display.Quantity(Model.Report.Summary.TotalAdjustedUp) / @Display.Quantity(Model.Report.Summary.TotalAdjustedDown)
+            </p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Net change</p>
+            <p class="readout__value @(Model.Report.Summary.NetChange < 0 ? "readout__value--critical" : null)">
+                @Display.Signed(Model.Report.Summary.NetChange)
+            </p>
+        </div>
+    </div>
+</section>
+
+<section>
+    @if (Model.Report.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>No movements in this period</strong>
+            Nothing was received, issued, transferred or counted for the filters selected.
+            <a href="/reports/movement">Clear them</a> to see the whole ledger.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>
+                    @Model.Report.TotalCount movements in this view, newest first. "After" is the level in that
+                    warehouse immediately after the entry, which is how a stock discrepancy is traced.
+                </caption>
+                <thead>
+                    <tr>
+                        <th scope="col">When (UTC)</th>
+                        <th scope="col">Movement</th>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">Change</th>
+                        <th scope="col" class="num">After</th>
+                        <th scope="col">Act</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Report.Items)
+                    {
+                        <tr>
+                            <td class="id">@Display.Timestamp(row.OccurredAt)</td>
+                            <td>@Display.MovementName(row.Type)</td>
+                            <td class="id">@row.Sku</td>
+                            <td>@row.ProductName</td>
+                            <td>@row.WarehouseName</td>
+                            <td class="num delta delta--@Display.MovementTone(row.Type)">@Display.Signed(row.SignedQuantity)</td>
+                            <td class="num">@Display.Quantity(row.QuantityAfter)</td>
+                            <td>
+                                <a class="btn--link" href="/inventory/history?productId=@row.ProductId&amp;warehouseId=@row.WarehouseId">Ledger</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

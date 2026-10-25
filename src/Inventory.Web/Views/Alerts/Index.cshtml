@@ -1,0 +1,161 @@
+@model AlertListViewModel
+
+@{
+    ViewData["Title"] = "Alerts";
+    var products = Pickers.Products(Model.Catalog, selected: Model.Filter.ProductId);
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.Filter.WarehouseId);
+    var types = new SelectModel
+    {
+        FieldName = "type",
+        Label = "Alert",
+        Options = Pickers.AlertTypes,
+        Selected = (int?)Model.Filter.Type,
+        EmptyLabel = "Both kinds"
+    };
+
+    var statusKey = Model.Filter.Status is null ? "all" : Model.Filter.Status == AlertStatus.ACTIVE ? "active" : "resolved";
+    var readKey = Model.Filter.IsRead switch { true => "read", false => "unread", _ => "all" };
+    var back = Context.Request.Path + Context.Request.QueryString;
+    var statuses = new (string Value, string Label)[] { ("active", "Active"), ("resolved", "Resolved"), ("all", "All statuses") };
+    var reads = new (string Value, string Label)[] { ("unread", "Unread"), ("read", "Acknowledged"), ("all", "Read or not") };
+}
+
+@section Actions {
+    @* Reading the alerts is not the same as being the one who answers them. *@
+    @if (Model.Unread.Count > 0 && User.CanOperate())
+    {
+        <form asp-controller="Alerts" asp-action="MarkAllRead" method="post"
+              data-confirm="Acknowledge every unread alert in this view?">
+            <input type="hidden" name="back" value="@back" />
+            <button type="submit" class="btn btn--quiet">Acknowledge all unread</button>
+        </form>
+    }
+    <a class="btn btn--quiet" href="/reports/low-stock">Short-stock report</a>
+}
+
+<section>
+    <form class="filters" method="get" asp-controller="Alerts" asp-action="Index">
+        <div class="field">
+            <label for="f-status">Status</label>
+            <select id="f-status" name="status">
+                @foreach (var option in statuses)
+                {
+                    if (option.Value == statusKey)
+                    {
+                        <option value="@option.Value" selected="selected">@option.Label</option>
+                    }
+                    else
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="f-read">Acknowledged</label>
+            <select id="f-read" name="read">
+                @foreach (var option in reads)
+                {
+                    if (option.Value == readKey)
+                    {
+                        <option value="@option.Value" selected="selected">@option.Label</option>
+                    }
+                    else
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <partial name="_Select" model="types" />
+        <partial name="_Select" model="products" />
+        <partial name="_Select" model="warehouses" />
+
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/alerts">Clear</a>
+        </span>
+    </form>
+
+    @if (Model.Page.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>No alerts in this view</strong>
+            The Alert service raises one when stock reaches a product's minimum and resolves it when the stock
+            comes back. <a href="/alerts?status=all">Look at every alert</a>, or <a href="/inventory">go to stock levels</a>.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>@Model.Page.TotalCount alerts in this view. Times are UTC.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Alert</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">On hand</th>
+                        <th scope="col" class="num">Minimum</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Raised (UTC)</th>
+                        <th scope="col">Act</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var alert in Model.Page.Items)
+                    {
+                        <tr>
+                            <td><span class="state state--@Display.AlertTone(alert.Type)">@Display.AlertName(alert.Type)</span></td>
+                            <td>
+                                <span class="grid__name">@Model.Catalog.ProductName(alert.ProductId)</span>
+                                <span class="grid__sub id">@Model.Catalog.Sku(alert.ProductId)</span>
+                            </td>
+                            <td>@Model.Catalog.WarehouseName(alert.WarehouseId)</td>
+                            <td class="num">@Display.Quantity(alert.CurrentQuantity)</td>
+                            <td class="num">@Display.Quantity(alert.MinimumStockLevel)</td>
+                            <td>
+                                @if (alert.Status == AlertStatus.RESOLVED)
+                                {
+                                    <span class="state state--ok">Resolved @Display.Timestamp(alert.ResolvedAt ?? alert.UpdatedAt)</span>
+                                }
+                                else if (alert.IsRead)
+                                {
+                                    <span class="state state--muted">Acknowledged</span>
+                                }
+                                else
+                                {
+                                    <span class="state state--attention">Waiting</span>
+                                }
+                            </td>
+                            <td class="id">@Display.Timestamp(alert.CreatedAt)</td>
+                            <td>
+                                <div class="actions-cell">
+                                    @if (!alert.IsRead && User.CanOperate())
+                                    {
+                                        <form asp-controller="Alerts" asp-action="MarkRead" asp-route-id="@alert.Id" method="post">
+                                            <input type="hidden" name="back" value="@back" />
+                                            <button type="submit" class="btn btn--quiet btn--small">Acknowledge</button>
+                                        </form>
+                                    }
+                                    <a class="btn--link" href="/inventory?productId=@alert.ProductId&amp;warehouseId=@alert.WarehouseId">Stock</a>
+                                    @if (User.CanOperate())
+                                    {
+                                        <a class="btn--link" href="/inventory/receive?productId=@alert.ProductId&amp;warehouseId=@alert.WarehouseId">Receive</a>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+ 
+</section>

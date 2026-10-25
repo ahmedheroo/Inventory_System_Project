@@ -1,0 +1,123 @@
+@model LowStockReportViewModel
+
+@{
+    var products = Pickers.Products(Model.Catalog, selected: Model.Filters.ProductId);
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.Filters.WarehouseId);
+}
+
+@section Actions {
+    <a class="btn" href="@Model.Filters.DownloadUrl("low-stock", "csv")">Download CSV</a>
+    <a class="btn btn--quiet" href="@Model.Filters.DownloadUrl("low-stock", "xlsx")">Download Excel</a>
+    <button type="button" class="btn btn--quiet" onclick="window.print()">Print</button>
+}
+
+<partial name="_ReportTabs" model="@("low-stock")" />
+
+<section>
+    <form class="filters" method="get" asp-controller="Reports" asp-action="LowStock">
+        <partial name="_Select" model="products" />
+        <partial name="_Select" model="warehouses" />
+
+        <label class="check">
+            <input type="checkbox" name="includeOutOfStock" value="true" checked="@(Model.Filters.IncludeOutOfStock)" />
+            Include out of stock
+        </label>
+
+        <input type="hidden" name="pageSize" value="@Model.Filters.PageSize" />
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/reports/low-stock">Clear</a>
+        </span>
+    </form>
+
+    <div class="readout">
+        <div class="readout__item">
+            <p class="readout__label">Below minimum</p>
+            <p class="readout__value readout__value--attention">@Display.Quantity(Model.Report.Summary.LowStockCount)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Out of stock</p>
+            <p class="readout__value readout__value--critical">@Display.Quantity(Model.Report.Summary.OutOfStockCount)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units short in total</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalShortfall)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Products affected</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.AffectedProducts)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Warehouses affected</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.AffectedWarehouses)</p>
+        </div>
+    </div>
+</section>
+
+<section>
+    @if (Model.Report.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>Nothing is below its minimum in this view</strong>
+            Every level at or above the minimum its product asks for. This is the report to keep empty —
+            <a href="/reports/inventory">the stock-on-hand report</a> shows the levels behind it.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>
+                    @Model.Report.TotalCount rows in this view, ordered by product and warehouse. "Short by" is what
+                    it takes to reach the minimum: receiving that quantity clears the row.
+                </caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">On hand</th>
+                        <th scope="col" class="num">Minimum</th>
+                        <th scope="col" class="num">Short by</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Updated (UTC)</th>
+                        <th scope="col">Act</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Report.Items)
+                    {
+                        <tr>
+                            <td class="id">@row.Sku</td>
+                            <td>@row.ProductName</td>
+                            <td>
+                                <span class="grid__name">@row.WarehouseName</span>
+                                <span class="grid__sub id">@row.WarehouseCode</span>
+                            </td>
+                            <td class="num">@Display.Quantity(row.Quantity)</td>
+                            <td class="num">@Display.Quantity(row.MinimumStockLevel)</td>
+                            <td class="num">@Display.Quantity(row.Shortfall)</td>
+                            <td><span class="state state--@Display.ShortageTone(row.Status)">@Display.ShortageName(row.Status)</span></td>
+                            <td class="id">@Display.Timestamp(row.UpdatedAt)</td>
+                            <td>
+                                @if (User.CanOperate())
+                                {
+                                    <a class="btn btn--quiet btn--small"
+                                       href="/inventory/receive?productId=@row.ProductId&amp;warehouseId=@row.WarehouseId">Receive</a>
+                                }
+                                else
+                                {
+                                    <a class="btn--link" href="/inventory?productId=@row.ProductId">Stock</a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

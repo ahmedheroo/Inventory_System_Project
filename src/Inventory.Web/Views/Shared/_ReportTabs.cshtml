@@ -1,0 +1,19 @@
+@model string
+
+@{
+    var tabs = new (string Key, string Label, string Href)[]
+    {
+        ("inventory", "Stock on hand", "/reports/inventory"),
+        ("low-stock", "Short stock", "/reports/low-stock"),
+        ("movement", "Movement ledger", "/reports/movement"),
+        ("valuation", "Stock valuation", "/reports/valuation")
+    };
+}
+
+<nav class="tabs" aria-label="Reports">
+    @foreach (var tab in tabs)
+    {
+        var active = string.Equals(Model, tab.Key, StringComparison.Ordinal);
+        <a class="@(active ? "is-active" : null)" href="@tab.Href" aria-current="@(active ? "page" : null)">@tab.Label</a>
+    }
+</nav>
