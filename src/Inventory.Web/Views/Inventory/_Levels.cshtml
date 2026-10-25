@@ -1,0 +1,103 @@
+@model StockListViewModel
+
+@*
+    The stock table and the filters above it, without the page around them: the levels page
+    renders this partial, and so does the live fragment the browser asks for when a level moves.
+*@
+<section>
+    <form class="filters" method="get" asp-controller="Inventory" asp-action="Index">
+        <partial name="_Select" model="Pickers.Products(Model.Catalog, selected: Model.Filter.ProductId)" />
+        <partial name="_Select" model="Pickers.Warehouses(Model.Catalog, selected: Model.Filter.WarehouseId)" />
+
+        <div class="field">
+            <label for="f-pageSize">Rows</label>
+            <select id="f-pageSize" name="pageSize">
+                @foreach (var size in new[] { 20, 50, 100 })
+                {
+                    if (Model.Filter.PageSize == size)
+                    {
+                        <option value="@size" selected="selected">@size</option>
+                    }
+                    else
+                    {
+                        <option value="@size">@size</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/inventory">Clear</a>
+        </span>
+    </form>
+
+    @if (Model.Page.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>No stock recorded for this view</strong>
+            The Inventory service has no entry for the product and warehouse selected. Receive stock to create one, or
+            <a href="/inventory">clear the filters</a> to see every level.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>
+                    @Model.Page.TotalCount stock levels in this view, holding @Display.Quantity(Model.TotalQuantity) units on this page.
+                    The minimum comes from the catalogue; the Inventory service stores quantities only.
+                </caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">On hand</th>
+                        <th scope="col" class="num">Minimum</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Updated (UTC)</th>
+                        <th scope="col">Act</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var stock in Model.Page.Items)
+                    {
+                        var minimum = Model.Catalog.MinimumOf(stock.ProductId);
+                        var state = Display.StockState(stock.Quantity, minimum);
+                        <tr class="@(Model.Focus == stock.Id ? "is-target" : null)"
+                            data-product="@stock.ProductId"
+                            data-warehouse="@stock.WarehouseId">
+                            <td class="id">@Model.Catalog.Sku(stock.ProductId)</td>
+                            <td>
+                                <span class="grid__name">@Model.Catalog.ProductName(stock.ProductId)</span>
+                                <span class="grid__sub">@Display.Money(Model.Catalog.UnitPriceOf(stock.ProductId)) each</span>
+                            </td>
+                            <td>@Model.Catalog.WarehouseName(stock.WarehouseId)</td>
+                            <td class="num">@Display.Quantity(stock.Quantity)</td>
+                            <td class="num">@(minimum is null ? "—" : Display.Quantity(minimum.Value))</td>
+                            <td><span class="state state--@state.Tone">@state.Label</span></td>
+                            <td class="id">@Display.Timestamp(stock.UpdatedAt)</td>
+                            <td>
+                                <div class="actions-cell">
+                                    @if (User.CanOperate())
+                                    {
+                                        <a class="btn btn--quiet btn--small"
+                                           href="/inventory/receive?productId=@stock.ProductId&amp;warehouseId=@stock.WarehouseId">Receive</a>
+                                        <a class="btn--link" href="/inventory/issue?productId=@stock.ProductId&amp;warehouseId=@stock.WarehouseId">Issue</a>
+                                    }
+
+                                    <a class="btn--link" href="/inventory/history?productId=@stock.ProductId&amp;warehouseId=@stock.WarehouseId">Ledger</a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

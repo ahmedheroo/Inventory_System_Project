@@ -1,0 +1,150 @@
+@model ProductListViewModel
+
+@{
+    ViewData["Title"] = "Products";
+}
+
+@section Actions {
+    @* Maintaining the catalogue is a manager's work; a viewer reads it. The action refuses it too. *@
+    @if (User.CanMaintainCatalogue())
+    {
+        <a class="btn" asp-controller="Products" asp-action="New">New product</a>
+    }
+
+    <a class="btn btn--quiet" href="/reports/valuation">Stock valuation</a>
+}
+
+<section>
+    <form class="filters" method="get" asp-controller="Products" asp-action="Index">
+        <div class="field">
+            <label for="f-search">Search</label>
+            <input id="f-search" type="search" name="search" value="@Model.Filter.Search" placeholder="Sku or name" />
+        </div>
+
+        <partial name="_Select" model="Pickers.Categories(Model.Categories, Model.Filter.CategoryId)" />
+
+        <div class="field">
+            <label for="f-pageSize">Rows</label>
+            <select id="f-pageSize" name="pageSize">
+                @foreach (var size in new[] { 20, 50, 100 })
+                {
+                    if (Model.Filter.PageSize == size)
+                    {
+                        <option value="@size" selected="selected">@size</option>
+                    }
+                    else
+                    {
+                        <option value="@size">@size</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <label class="check">
+            <input type="checkbox" name="includeInactive" value="true" checked="@(Model.Filter.IncludeInactive)" />
+            Include inactive
+        </label>
+
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/products">Clear</a>
+        </span>
+    </form>
+
+    @if (Model.Page.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>No products match this view</strong>
+            @if (Model.Filter.Search is not null || Model.Filter.CategoryId is not null || !Model.Filter.IncludeInactive)
+            {
+                <text>Nothing in the catalogue matches the search and filters. <a href="/products">Clear them</a> to see the whole catalogue.</text>
+            }
+            else
+            {
+                if (User.CanMaintainCatalogue())
+                {
+                    <text>The catalogue is empty. <a asp-controller="Products" asp-action="New">Create the first product</a> so stock can be received against it.</text>
+                }
+                else
+                {
+                    <text>The catalogue is empty. Products are added by a manager.</text>
+                }
+            }
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>@Model.Page.TotalCount products in this view.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Category</th>
+                        <th scope="col" class="num">Unit price</th>
+                        <th scope="col" class="num">Minimum</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in Model.Page.Items)
+                    {
+                        <tr>
+                            <td class="id">@product.Sku</td>
+                            <td>
+                                <span class="grid__name">@product.Name</span>
+                                @if (!string.IsNullOrWhiteSpace(product.Description))
+                                {
+                                    <span class="grid__sub">@product.Description</span>
+                                }
+                            </td>
+                            <td>@(product.CategoryName ?? "Uncategorised")</td>
+                            <td class="num">@Display.Money(product.UnitPrice)</td>
+                            <td class="num">@Display.Quantity(product.MinimumStockLevel)</td>
+                            <td>
+                                @if (product.IsActive)
+                                {
+                                    <span class="state state--ok">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="state state--muted">Inactive</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="actions-cell">
+                                    <a class="btn--link" href="/inventory?productId=@product.Id">Stock</a>
+
+                                    @if (User.CanMaintainCatalogue())
+                                    {
+                                        <a class="btn btn--quiet btn--small" asp-controller="Products" asp-action="Edit" asp-route-id="@product.Id">Open</a>
+
+                                        if (product.IsActive)
+                                        {
+                                            <form asp-controller="Products" asp-action="Deactivate" asp-route-id="@product.Id" method="post"
+                                                  data-confirm="Deactivate @product.Sku · @product.Name? It keeps its stock history and disappears from the list.">
+                                                <button type="submit" class="btn btn--quiet btn--small">Deactivate</button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-controller="Products" asp-action="Activate" asp-route-id="@product.Id" method="post">
+                                                <button type="submit" class="btn btn--quiet btn--small">Activate</button>
+                                            </form>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

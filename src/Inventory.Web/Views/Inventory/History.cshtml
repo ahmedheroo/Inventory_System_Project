@@ -1,0 +1,89 @@
+@model HistoryListViewModel
+
+@{
+    ViewData["Title"] = "Movement ledger";
+    var products = Pickers.Products(Model.Catalog, selected: Model.Filter.ProductId);
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.Filter.WarehouseId);
+    var movements = new SelectModel
+    {
+        FieldName = "type",
+        Label = "Movement",
+        Options = Pickers.MovementTypes,
+        Selected = (int?)Model.Filter.Type,
+        EmptyLabel = "All movements"
+    };
+}
+
+@section Actions {
+    <a class="btn btn--quiet" href="/reports/movement">Movement report</a>
+    <a class="btn btn--quiet" href="/inventory">Stock levels</a>
+}
+
+<section>
+    <form class="filters" method="get" asp-controller="Inventory" asp-action="History">
+        <partial name="_Select" model="products" />
+        <partial name="_Select" model="warehouses" />
+        <partial name="_Select" model="movements" />
+
+        <div class="field">
+            <label for="f-from">From</label>
+            <input id="f-from" type="date" name="from" value="@Display.DateInput(Model.Filter.From)" />
+        </div>
+
+        <div class="field">
+            <label for="f-to">To</label>
+            <input id="f-to" type="date" name="to" value="@Display.DateInput(Model.Filter.To)" />
+        </div>
+
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/inventory/history">Clear</a>
+        </span>
+    </form>
+
+    @if (Model.Page.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>No movements match this view</strong>
+            Receipts, issues, transfers and counts written by the Inventory service appear here, newest first.
+            <a href="/inventory/history">Clear the filters</a> to see the whole ledger.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>@Model.Page.TotalCount movements in this view, newest first. Times are UTC.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">When (UTC)</th>
+                        <th scope="col">Movement</th>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">Change</th>
+                        <th scope="col">Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in Model.Page.Items)
+                    {
+                        <tr>
+                            <td class="id">@Display.Timestamp(entry.CreatedAt)</td>
+                            <td>@Display.MovementName(entry.Type)</td>
+                            <td class="id">@Model.Catalog.Sku(entry.ProductId)</td>
+                            <td>@Model.Catalog.ProductName(entry.ProductId)</td>
+                            <td>@Model.Catalog.WarehouseName(entry.WarehouseId)</td>
+                            <td class="num delta delta--@Display.MovementTone(entry.Type)">@Display.Signed(entry.SignedQuantity)</td>
+                            <td>@(string.IsNullOrWhiteSpace(entry.Reference) ? "—" : entry.Reference)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

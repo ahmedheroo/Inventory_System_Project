@@ -1,0 +1,124 @@
+@model InventoryReportViewModel
+
+@{
+    var products = Pickers.Products(Model.Catalog, selected: Model.Filters.ProductId);
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.Filters.WarehouseId);
+}
+
+@section Actions {
+    <a class="btn" href="@Model.Filters.DownloadUrl("inventory", "csv")">Download CSV</a>
+    <a class="btn btn--quiet" href="@Model.Filters.DownloadUrl("inventory", "xlsx")">Download Excel</a>
+    <button type="button" class="btn btn--quiet" onclick="window.print()">Print</button>
+}
+
+<partial name="_ReportTabs" model="@("inventory")" />
+
+<section>
+    <form class="filters" method="get" asp-controller="Reports" asp-action="Inventory">
+        <partial name="_Select" model="products" />
+        <partial name="_Select" model="warehouses" />
+
+        <input type="hidden" name="pageSize" value="@Model.Filters.PageSize" />
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/reports/inventory">Clear</a>
+        </span>
+    </form>
+
+    <div class="readout">
+        <div class="readout__item">
+            <p class="readout__label">Value in this view</p>
+            <p class="readout__value">@Display.Money(Model.Report.Summary.TotalValue)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units on hand</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalQuantity)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Stock levels</p>
+            <p class="readout__value">
+                @Display.Quantity(Model.Report.Summary.StockLevelCount)
+                <small>@Model.Report.Summary.ProductCount products in @Model.Report.Summary.WarehouseCount warehouses</small>
+            </p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Below minimum</p>
+            <p class="readout__value readout__value--attention">@Display.Quantity(Model.Report.Summary.LowStockCount)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Out of stock</p>
+            <p class="readout__value readout__value--critical">@Display.Quantity(Model.Report.Summary.OutOfStockCount)</p>
+        </div>
+    </div>
+</section>
+
+<section>
+    @if (Model.Report.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>Nothing to report for this view</strong>
+            No stock level matches the product and warehouse selected. <a href="/reports/inventory">Clear the filters</a>
+            to see every level the Inventory service holds.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>
+                    @Model.Report.TotalCount stock levels in this view, ordered by product and warehouse. Values use the
+                    product's current unit price; the download contains every matching row, not just this page.
+                </caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">On hand</th>
+                        <th scope="col" class="num">Minimum</th>
+                        <th scope="col" class="num">Unit price</th>
+                        <th scope="col" class="num">Value</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Updated (UTC)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Report.Items)
+                    {
+                        <tr>
+                            <td class="id">@row.Sku</td>
+                            <td>@row.ProductName</td>
+                            <td>
+                                <span class="grid__name">@row.WarehouseName</span>
+                                <span class="grid__sub id">@row.WarehouseCode</span>
+                            </td>
+                            <td class="num">@Display.Quantity(row.Quantity)</td>
+                            <td class="num">@Display.Quantity(row.MinimumStockLevel)</td>
+                            <td class="num">@Display.Money(row.UnitPrice)</td>
+                            <td class="num">@Display.Money(row.Value)</td>
+                            <td>
+                                @if (row.IsOutOfStock)
+                                {
+                                    <span class="state state--critical">Out of stock</span>
+                                }
+                                else if (row.IsLowStock)
+                                {
+                                    <span class="state state--attention">Below minimum</span>
+                                }
+                                else
+                                {
+                                    <span class="state state--ok">Above minimum</span>
+                                }
+                            </td>
+                            <td class="id">@Display.Timestamp(row.UpdatedAt)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

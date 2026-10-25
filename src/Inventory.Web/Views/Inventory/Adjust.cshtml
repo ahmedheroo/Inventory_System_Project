@@ -1,0 +1,43 @@
+@model AdjustStockForm
+
+@{
+    var products = Pickers.Products(Model.Catalog, selected: Model.ProductId > 0 ? Model.ProductId : null, emptyLabel: "Choose a product");
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.WarehouseId > 0 ? Model.WarehouseId : null, emptyLabel: "Choose a warehouse");
+}
+
+@section Actions {
+    <a class="btn btn--quiet" href="/inventory/history">Movement ledger</a>
+    <a class="btn btn--quiet" href="/inventory/receive">Receive instead</a>
+}
+
+<section>
+    <form class="form-panel" method="post" asp-controller="Inventory" asp-action="Adjust">
+        <h3>Adjust stock</h3>
+
+        <div class="validation-summary" asp-validation-summary="All"></div>
+
+        <div class="form-grid">
+            <partial name="_Select" model="products" />
+            <partial name="_Select" model="warehouses" />
+
+            <div class="field">
+                <label for="NewQuantity">Counted quantity</label>
+                <input id="NewQuantity" name="NewQuantity" type="number" min="0" step="1" value="@Model.NewQuantity" required />
+                <span class="field__hint">What is physically on the shelf. The service sets the level to it and records the difference.</span>
+                <span class="field__error">@Html.ValidationMessage("NewQuantity")</span>
+            </div>
+
+            <div class="field">
+                <label for="Reference">Reference</label>
+                <input id="Reference" name="Reference" type="text" value="@Model.Reference" maxlength="200" placeholder="Count sheet, shift or reason" />
+                <span class="field__hint">Name the count, so a later reader knows why the level moved.</span>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Record adjustment</button>
+            <a class="btn btn--quiet" href="/inventory">Back to stock levels</a>
+            <span class="hint-inline">A stock count that matches the ledger writes an entry with no difference.</span>
+        </div>
+    </form>
+</section>

@@ -1,0 +1,136 @@
+@model ValuationReportViewModel
+
+@{
+    var warehouses = Pickers.Warehouses(Model.Catalog, selected: Model.Filters.WarehouseId);
+    var categories = Pickers.Categories(Model.Categories, Model.Filters.CategoryId);
+}
+
+@section Actions {
+    <a class="btn" href="@Model.Filters.DownloadUrl("valuation", "csv")">Download CSV</a>
+    <a class="btn btn--quiet" href="@Model.Filters.DownloadUrl("valuation", "xlsx")">Download Excel</a>
+    <button type="button" class="btn btn--quiet" onclick="window.print()">Print</button>
+}
+
+<partial name="_ReportTabs" model="@("valuation")" />
+
+<section>
+    <form class="filters" method="get" asp-controller="Reports" asp-action="Valuation">
+        <partial name="_Select" model="warehouses" />
+        <partial name="_Select" model="categories" />
+
+        <input type="hidden" name="pageSize" value="@Model.Filters.PageSize" />
+        <input type="hidden" name="page" value="1" />
+
+        <span class="filters__actions">
+            <button type="submit" class="btn">Apply</button>
+            <a class="btn btn--quiet" href="/reports/valuation">Clear</a>
+        </span>
+    </form>
+
+    <div class="readout">
+        <div class="readout__item">
+            <p class="readout__label">Total value</p>
+            <p class="readout__value">@Display.Money(Model.Report.Summary.TotalValue)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Units on hand</p>
+            <p class="readout__value">@Display.Quantity(Model.Report.Summary.TotalQuantity)</p>
+        </div>
+        <div class="readout__item">
+            <p class="readout__label">Stock levels</p>
+            <p class="readout__value">
+                @Display.Quantity(Model.Report.Summary.StockLevelCount)
+                <small>@Model.Report.Summary.ProductCount products in @Model.Report.Summary.WarehouseCount warehouses</small>
+            </p>
+        </div>
+    </div>
+</section>
+
+@if (Model.Report.ByWarehouse.Count > 0)
+{
+    <section>
+        <div class="section-head">
+            <h2>What each warehouse is worth</h2>
+            <p class="meta">Independent of the page you are on: these totals cover every row of the view.</p>
+        </div>
+
+        <div class="table-frame">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th scope="col">Code</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">Units</th>
+                        <th scope="col" class="num">Value</th>
+                        <th scope="col" class="num">Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var total in Model.Report.ByWarehouse.OrderByDescending(entry => entry.Value))
+                    {
+                        var share = Model.Report.Summary.TotalValue == 0m
+                            ? 0
+                            : (int)Math.Round(total.Value / Model.Report.Summary.TotalValue * 100);
+                        <tr>
+                            <td class="id">@total.WarehouseCode</td>
+                            <td>@total.WarehouseName</td>
+                            <td class="num">@Display.Quantity(total.Quantity)</td>
+                            <td class="num">@Display.Money(total.Value)</td>
+                            <td class="num">@share%</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+<section>
+    @if (Model.Report.Items.Count == 0)
+    {
+        <div class="empty">
+            <strong>Nothing to value in this view</strong>
+            No stock level matches the warehouse and category selected. <a href="/reports/valuation">Clear the filters</a>
+            to value everything on hand.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>
+                    @Model.Report.TotalCount rows in this view. Value is the quantity on hand times the product's
+                    current unit price, so it moves when a price changes and when stock does.
+                </caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Sku</th>
+                        <th scope="col">Product</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col" class="num">On hand</th>
+                        <th scope="col" class="num">Unit price</th>
+                        <th scope="col" class="num">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Report.Items)
+                    {
+                        <tr>
+                            <td class="id">@row.Sku</td>
+                            <td>@row.ProductName</td>
+                            <td>
+                                <span class="grid__name">@row.WarehouseName</span>
+                                <span class="grid__sub id">@row.WarehouseCode</span>
+                            </td>
+                            <td class="num">@Display.Quantity(row.Quantity)</td>
+                            <td class="num">@Display.Money(row.UnitPrice)</td>
+                            <td class="num">@Display.Money(row.Value)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <partial name="_Pager" model="Model.Pager" />
+    }
+</section>

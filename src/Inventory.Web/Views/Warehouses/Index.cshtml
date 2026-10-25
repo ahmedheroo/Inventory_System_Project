@@ -1,0 +1,163 @@
+@model WarehouseListViewModel
+
+@{
+    ViewData["Title"] = "Warehouses";
+}
+
+@section Actions {
+    <form class="filters" method="get" asp-controller="Warehouses" asp-action="Index" style="margin:0;padding:0;border:0;background:none">
+        <label class="check">
+            <input type="checkbox" name="includeInactive" value="true" checked="@(Model.IncludeInactive)" onchange="this.form.submit()" />
+            Include inactive
+        </label>
+    </form>
+}
+
+<section>
+    @* The catalogue is kept by a manager; everyone else reads it. *@
+    @if (!User.CanMaintainCatalogue())
+    {
+        <p class="hint-inline">Warehouses are kept by a manager. Your role reads them, and the stock held in them.</p>
+    }
+    else if (Model.EditForm is null)
+    {
+        <form class="form-panel" method="post" asp-controller="Warehouses" asp-action="Create">
+            <h3>New warehouse</h3>
+            <p class="meta">
+                The code is the warehouse's short name on labels and on the movement ledger
+                (CAI, ALX). It cannot be changed later, so use the one the racks are marked with.
+            </p>
+
+            <div class="validation-summary" asp-validation-summary="All"></div>
+
+            <div class="form-grid">
+                <div class="field">
+                    <label for="Code">Code</label>
+                    <input id="Code" name="Code" type="text" value="@Model.CreateForm.Code" maxlength="20" required />
+                    <span class="field__error">@Html.ValidationMessage("Code")</span>
+                </div>
+
+                <div class="field">
+                    <label for="Name">Name</label>
+                    <input id="Name" name="Name" type="text" value="@Model.CreateForm.Name" maxlength="150" required />
+                    <span class="field__error">@Html.ValidationMessage("Name")</span>
+                </div>
+
+                <div class="field field--wide">
+                    <label for="Address">Address</label>
+                    <input id="Address" name="Address" type="text" value="@Model.CreateForm.Address" maxlength="500" />
+                    <span class="field__error">@Html.ValidationMessage("Address")</span>
+                </div>
+            </div>
+
+            <input type="hidden" name="includeInactive" value="@(Model.IncludeInactive ? "true" : "false")" />
+
+            <div class="form-actions">
+                <button type="submit" class="btn">Create warehouse</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <form class="form-panel" method="post" asp-controller="Warehouses" asp-action="Edit" asp-route-id="@Model.EditForm.Id">
+            <h3>Edit @Model.EditForm.Name</h3>
+            <p class="meta">Warehouse @Model.EditForm.Id · code <span class="id">@Model.EditForm.Code</span></p>
+
+            <div class="validation-summary" asp-validation-summary="All"></div>
+
+            <div class="form-grid">
+                <div class="field">
+                    <label for="Name">Name</label>
+                    <input id="Name" name="Name" type="text" value="@Model.EditForm.Name" maxlength="150" required autofocus />
+                    <span class="field__error">@Html.ValidationMessage("Name")</span>
+                </div>
+
+                <div class="field field--wide">
+                    <label for="Address">Address</label>
+                    <input id="Address" name="Address" type="text" value="@Model.EditForm.Address" maxlength="500" />
+                    <span class="field__error">@Html.ValidationMessage("Address")</span>
+                </div>
+            </div>
+
+            <input type="hidden" name="includeInactive" value="@(Model.IncludeInactive ? "true" : "false")" />
+
+            <div class="form-actions">
+                <button type="submit" class="btn">Save warehouse</button>
+                <a class="btn btn--quiet" asp-controller="Warehouses" asp-action="Index">Cancel</a>
+            </div>
+        </form>
+    }
+</section>
+
+<section>
+    @if (Model.Warehouses.Count == 0)
+    {
+        <div class="empty">
+            <strong>No warehouses yet</strong>
+            Stock lives in a warehouse. Create one above, then receive stock into it.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>@Model.Warehouses.Count warehouses@(Model.IncludeInactive ? ", inactive ones included" : " (active only)").</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Code</th>
+                        <th scope="col">Warehouse</th>
+                        <th scope="col">Address</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var warehouse in Model.Warehouses)
+                    {
+                        <tr>
+                            <td class="id">@warehouse.Code</td>
+                            <td><span class="grid__name">@warehouse.Name</span></td>
+                            <td>@(warehouse.Address ?? "—")</td>
+                            <td>
+                                @if (warehouse.IsActive)
+                                {
+                                    <span class="state state--ok">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="state state--muted">Inactive</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="actions-cell">
+                                    <a class="btn--link" href="/inventory?warehouseId=@warehouse.Id">Stock</a>
+
+                                    @if (User.CanMaintainCatalogue())
+                                    {
+                                        <a class="btn btn--quiet btn--small" asp-controller="Warehouses" asp-action="Index"
+                                           asp-route-edit="@warehouse.Id" asp-route-includeInactive="@Model.IncludeInactive">Edit</a>
+
+                                        if (warehouse.IsActive)
+                                        {
+                                            <form asp-controller="Warehouses" asp-action="Deactivate" asp-route-id="@warehouse.Id" method="post"
+                                                  data-confirm="Deactivate @warehouse.Code · @warehouse.Name? It keeps its stock and history but is not offered for new operations.">
+                                                <button type="submit" class="btn btn--quiet btn--small">Deactivate</button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-controller="Warehouses" asp-action="Activate" asp-route-id="@warehouse.Id" method="post">
+                                                <button type="submit" class="btn btn--quiet btn--small">Activate</button>
+                                            </form>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+ 
+</section>

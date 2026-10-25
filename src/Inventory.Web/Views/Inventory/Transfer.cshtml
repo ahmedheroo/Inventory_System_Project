@@ -1,0 +1,55 @@
+@model TransferStockForm
+
+@{
+    var products = Pickers.Products(Model.Catalog, selected: Model.ProductId > 0 ? Model.ProductId : null, emptyLabel: "Choose a product");
+    var sources = Pickers.Warehouses(
+        Model.Catalog,
+        "SourceWarehouseId",
+        "From warehouse",
+        Model.SourceWarehouseId > 0 ? Model.SourceWarehouseId : null,
+        "Choose the source");
+    var destinations = Pickers.Warehouses(
+        Model.Catalog,
+        "DestinationWarehouseId",
+        "To warehouse",
+        Model.DestinationWarehouseId > 0 ? Model.DestinationWarehouseId : null,
+        "Choose the destination");
+}
+
+@section Actions {
+    <a class="btn btn--quiet" href="/inventory/receive">Receive instead</a>
+    <a class="btn btn--quiet" href="/inventory/adjust">Adjust instead</a>
+}
+
+<section>
+    <form class="form-panel" method="post" asp-controller="Inventory" asp-action="Transfer">
+        <h3>Transfer stock</h3>
+
+        <div class="validation-summary" asp-validation-summary="All"></div>
+
+        <div class="form-grid">
+            <partial name="_Select" model="products" />
+            <partial name="_Select" model="sources" />
+            <partial name="_Select" model="destinations" />
+
+            <div class="field">
+                <label for="Quantity">Quantity</label>
+                <input id="Quantity" name="Quantity" type="number" min="1" step="1" value="@Model.Quantity" required />
+                <span class="field__hint">One operation: the service writes the matching out and in entries together.</span>
+                <span class="field__error">@Html.ValidationMessage("Quantity")</span>
+            </div>
+
+            <div class="field">
+                <label for="Reference">Reference</label>
+                <input id="Reference" name="Reference" type="text" value="@Model.Reference" maxlength="200" placeholder="Movement note or vehicle" />
+                <span class="field__hint">Written into both ledger entries.</span>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Transfer stock</button>
+            <a class="btn btn--quiet" href="/inventory">Back to stock levels</a>
+            <span class="hint-inline">The source warehouse is the one the next screen opens on.</span>
+        </div>
+    </form>
+</section>

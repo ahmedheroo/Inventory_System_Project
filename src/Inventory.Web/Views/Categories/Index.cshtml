@@ -1,0 +1,122 @@
+@model CategoryListViewModel
+
+@{
+    ViewData["Title"] = "Categories";
+}
+
+<section>
+    @* The catalogue is kept by a manager; everyone else reads it. *@
+    @if (!User.CanMaintainCatalogue())
+    {
+        <p class="hint-inline">Categories are kept by a manager. Your role reads them, and everything filed under them.</p>
+    }
+    else if (Model.EditForm is null)
+    {
+        <form class="form-panel" method="post" asp-controller="Categories" asp-action="Create">
+            <h3>New category</h3>
+            <p class="meta">Categories group products in reports and in the valuation. A product belongs to at most one.</p>
+
+            <div class="validation-summary" asp-validation-summary="All"></div>
+
+            <div class="form-grid">
+                <div class="field">
+                    <label for="Name">Name</label>
+                    <input id="Name" name="Name" type="text" value="@Model.CreateForm.Name" maxlength="100" required />
+                    <span class="field__error">@Html.ValidationMessage("Name")</span>
+                </div>
+
+                <div class="field">
+                    <label for="Description">Description</label>
+                    <input id="Description" name="Description" type="text" value="@Model.CreateForm.Description" maxlength="500" />
+                    <span class="field__error">@Html.ValidationMessage("Description")</span>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn">Create category</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <form class="form-panel" method="post" asp-controller="Categories" asp-action="Edit" asp-route-id="@Model.EditForm.Id">
+            <h3>Edit @Model.EditForm.Name</h3>
+            <p class="meta">Renaming a category changes it everywhere it is shown, including on products.</p>
+
+            <div class="validation-summary" asp-validation-summary="All"></div>
+
+            <div class="form-grid">
+                <div class="field">
+                    <label for="Name">Name</label>
+                    <input id="Name" name="Name" type="text" value="@Model.EditForm.Name" maxlength="100" required autofocus />
+                    <span class="field__error">@Html.ValidationMessage("Name")</span>
+                </div>
+
+                <div class="field">
+                    <label for="Description">Description</label>
+                    <input id="Description" name="Description" type="text" value="@Model.EditForm.Description" maxlength="500" />
+                    <span class="field__error">@Html.ValidationMessage("Description")</span>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn">Save category</button>
+                <a class="btn btn--quiet" asp-controller="Categories" asp-action="Index">Cancel</a>
+            </div>
+        </form>
+    }
+</section>
+
+<section>
+    @if (Model.Categories.Count == 0)
+    {
+        <div class="empty">
+            <strong>No categories yet</strong>
+            Categories are optional: products work without one, and are shown as uncategorised until you add them here.
+        </div>
+    }
+    else
+    {
+        <div class="table-frame">
+            <table class="grid">
+                <caption>@Model.Categories.Count categories.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Category</th>
+                        <th scope="col">Description</th>
+                        <th scope="col" class="num">Products</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <tr>
+                            <td><span class="grid__name">@category.Name</span></td>
+                            <td>@(category.Description ?? "—")</td>
+                            <td class="num">
+                                <a href="/products?categoryId=@category.Id">@Display.Quantity(category.ProductCount)</a>
+                            </td>
+                            <td>
+                                @if (User.CanMaintainCatalogue())
+                                {
+                                    <div class="actions-cell">
+                                        <a class="btn btn--quiet btn--small" asp-controller="Categories" asp-action="Index" asp-route-edit="@category.Id">Edit</a>
+                                        <form asp-controller="Categories" asp-action="Delete" asp-route-id="@category.Id" method="post"
+                                              data-confirm="Delete @category.Name? Products in it keep their stock and become uncategorised.">
+                                            <button type="submit" class="btn btn--quiet btn--small">Delete</button>
+                                        </form>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="hint-inline">Read only</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

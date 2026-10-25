@@ -1,0 +1,60 @@
+@model NewProductForm
+
+@{
+    ViewData["Title"] = "New product";
+    var categories = Pickers.Categories(Model.Categories, Model.CategoryId, "Uncategorised");
+}
+
+<section>
+    <form class="form-panel" method="post" asp-controller="Products" asp-action="New">
+        <h3>New product</h3>
+        <p class="meta">
+            The sku identifies the product in the warehouse and is written on labels and movement records.
+            It cannot be changed once stock exists against it, so copy it from the manufacturer or the label.
+        </p>
+
+        <div class="validation-summary" asp-validation-summary="All"></div>
+
+        <div class="form-grid">
+            <div class="field">
+                <label for="Sku">Sku</label>
+                <input id="Sku" name="Sku" type="text" value="@Model.Sku" maxlength="50" required autofocus />
+                <span class="field__error">@Html.ValidationMessage("Sku")</span>
+            </div>
+
+            <div class="field">
+                <label for="Name">Name</label>
+                <input id="Name" name="Name" type="text" value="@Model.Name" maxlength="200" required />
+                <span class="field__error">@Html.ValidationMessage("Name")</span>
+            </div>
+
+            <partial name="_Select" model="categories" />
+
+            <div class="field">
+                <label for="UnitPrice">Unit price</label>
+                <input id="UnitPrice" name="UnitPrice" type="number" step="0.01" min="0" value="@Display.Amount(Model.UnitPrice)" required />
+                <span class="field__hint">Used to value stock. The service multiplies it by the quantity on hand.</span>
+                <span class="field__error">@Html.ValidationMessage("UnitPrice")</span>
+            </div>
+
+            <div class="field">
+                <label for="MinimumStockLevel">Minimum stock level</label>
+                <input id="MinimumStockLevel" name="MinimumStockLevel" type="number" step="1" min="0" value="@Model.MinimumStockLevel" required />
+                <span class="field__hint">The level the Alert service watches: at or below it, an alert is raised.</span>
+                <span class="field__error">@Html.ValidationMessage("MinimumStockLevel")</span>
+            </div>
+
+            <div class="field field--wide">
+                <label for="Description">Description</label>
+                <textarea id="Description" name="Description" rows="3" maxlength="1000">@Model.Description</textarea>
+                <span class="field__error">@Html.ValidationMessage("Description")</span>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Create product</button>
+            <a class="btn btn--quiet" asp-controller="Products" asp-action="Index">Cancel</a>
+            <span class="hint-inline">Stock is received after the product exists — the next screen offers it.</span>
+        </div>
+    </form>
+</section>

@@ -1,0 +1,24 @@
+@model ServiceErrorViewModel
+
+@{
+    ViewData["Nav"] = string.Empty;
+    ViewData["Section"] = "Console";
+    ViewData["Title"] = $"{Model.Service} did not answer";
+}
+
+<section class="fault">
+    <h2>This screen could not be read</h2>
+    <p class="lede">@Model.Explanation</p>
+    <p>
+        Nothing was changed: the console only reads from the services, so no entry is half-written and
+        no quantity is stale here — this page simply has no data to show.
+    </p>
+    <p class="fault__status">@Model.StatusLine</p>
+    <p>
+        @if (!Context.Request.Path.StartsWithSegments("/live"))
+        {
+            <a class="btn" href="@Context.Request.Path">Try this page again</a>
+        }
+        <a class="btn btn--quiet" href="/">Go to the overview</a>
+    </p>
+</section>

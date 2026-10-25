@@ -1,0 +1,39 @@
+@model Pager
+
+<nav class="pager" aria-label="Paging">
+    <span>
+        @if (Model.TotalCount == 0)
+        {
+            <text>No rows</text>
+        }
+        else
+        {
+            <text>Rows <strong>@Model.FirstRowNumber</strong>–<strong>@Model.LastRowNumber</strong> of <strong>@Model.TotalCount.ToString("N0")</strong></text>
+        }
+    </span>
+
+    @if (Model.TotalPages > 1)
+    {
+        <span class="pager__links">
+            @if (Model.HasPreviousPage)
+            {
+                <a href="@Model.Url(Model.Page - 1)" rel="prev">Previous</a>
+            }
+            else
+            {
+                <span class="state state--muted">Previous</span>
+            }
+
+            <span>Page <strong>@Model.Page</strong> of <strong>@Model.TotalPages</strong></span>
+
+            @if (Model.HasNextPage)
+            {
+                <a href="@Model.Url(Model.Page + 1)" rel="next">Next</a>
+            }
+            else
+            {
+                <span class="state state--muted">Next</span>
+            }
+        </span>
+    }
+</nav>

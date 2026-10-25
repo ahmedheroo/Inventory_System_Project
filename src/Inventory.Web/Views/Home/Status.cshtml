@@ -1,0 +1,11 @@
+@model StatusViewModel
+
+<section class="fault">
+    <h2>@Model.Code · @Model.Headline</h2>
+    <p class="lede">@Model.Explanation</p>
+    <p class="fault__status">@Model.Code</p>
+    <p>
+        <a class="btn" href="/">Go to the overview</a>
+        <a class="btn btn--quiet" href="/products">Open the product list</a>
+    </p>
+</section>

@@ -1,0 +1,36 @@
+@model AttentionNotice
+
+@{
+    // The worst alert decides the tone; the words decide the meaning. A reader who cannot
+    // tell amber from red loses nothing, and a service that could not be read says so
+    // rather than showing a confident zero.
+    var tone = Model switch
+    {
+        { Unavailable: not null } => "muted",
+        { ActiveCount: 0 } => "ok",
+        { AnyOutOfStock: true } => "critical",
+        _ => "attention"
+    };
+}
+
+<a class="rail__attention state state--@tone" href="/alerts">
+    @if (Model.Unavailable is not null)
+    {
+        <span class="rail__attention-label">Alerts not read · @Model.Unavailable</span>
+    }
+    else if (Model.ActiveCount == 0)
+    {
+        <span class="rail__attention-label">No active alerts</span>
+    }
+    else
+    {
+        <b class="rail__attention-count">@Display.Quantity(Model.ActiveCount)</b>
+        <span class="rail__attention-label">
+            @(Model.ActiveCount == 1 ? "active alert" : "active alerts")
+            @if (Model.AnyOutOfStock)
+            {
+                <small>including out of stock</small>
+            }
+        </span>
+    }
+</a>

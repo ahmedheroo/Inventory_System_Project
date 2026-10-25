@@ -1,8 +1,16 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
-}
+@model DashboardViewModel
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+@*
+    The board is a live region: everything below the page band is re-read from
+    /live/overview whenever the Inventory hub says stock moved. The wrapper is what gets
+    replaced, so the markup of the board itself lives in one partial and is used both by
+    this page and by that fragment.
+*@
+<div class="live-region"
+     data-live="page"
+     data-live-source="/live/overview"
+     data-live-stamp="true"
+     aria-live="polite"
+     aria-busy="false">
+    <partial name="_Overview" model="Model" />
 </div>

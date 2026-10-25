@@ -1,4 +1,15 @@
-﻿// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
-// for details on configuring this project to bundle and minify static web assets.
+// The console ships one script. Anything a screen needs is either server-rendered or
+// the browser's own behaviour (date pickers, form validation, printing). The one thing
+// the browser cannot ask for is "did you mean it": a form marked data-confirm gets a
+// question, and the answer is the only thing that submits it.
+document.addEventListener('submit', function (event) {
+    var form = event.target;
 
-// Write your JavaScript code.
+    if (!(form instanceof HTMLFormElement) || !form.dataset.confirm) {
+        return;
+    }
+
+    if (!window.confirm(form.dataset.confirm)) {
+        event.preventDefault();
+    }
+});

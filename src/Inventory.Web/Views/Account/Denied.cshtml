@@ -1,0 +1,21 @@
+@{
+    ViewData["Title"] = "Not your screen";
+    ViewData["Nav"] = string.Empty;
+    ViewData["Section"] = "Console";
+}
+
+<section class="fault">
+    <h2>This part of the console is not for your role</h2>
+    <p class="lede">
+        You are signed in as <b>@User.SignedInAs()</b> (@User.RoleLabel()). The console knows who you
+        are — this screen, or the action you asked for, belongs to another role.
+    </p>
+    <p>
+        The rail lists the screens your role covers: stock operations are the dock's work, and the
+        catalogue belongs to whoever keeps it. Nothing was changed by the attempt.
+    </p>
+    <p>
+        <a class="btn" href="/">Go to the overview</a>
+        <a class="btn btn--quiet" href="/sign-in">Sign in as somebody else</a>
+    </p>
+</section>
