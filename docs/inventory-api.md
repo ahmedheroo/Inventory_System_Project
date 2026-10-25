@@ -150,8 +150,65 @@ Each successful operation publishes one event to the RabbitMQ topic exchange `in
 `currentQuantity` and `minimumStockLevel` so the Alert service can apply the low-stock rule
 (`currentQuantity <= minimumStockLevel`) without any further lookup.
 
-> Until Sprint 4 wires up RabbitMQ, the registered publisher writes the routed event and its payload
-> to the service log.
+## Live updates (SignalR)
+
+`/hubs/stock` is a SignalR hub that broadcasts one notification per **committed** stock change to
+every connected client. It is the live view of stock: a broadcast, not a feed — there is no
+subscription state and nothing to catch up on, so a client that connects late reads the current state
+from the REST API and follows the notifications from there.
+
+| When | What is sent |
+| ---- | ------------ |
+| a receive, issue or adjustment commits | one `StockChanged` carrying the change, the quantity that moved, the level it left and the product's minimum at that moment |
+| a transfer commits | **one** `StockChanged` carrying both legs, not two |
+| an operation is refused | nothing — the same rule as the outbox: only committed facts are announced |
+| a client is slow, gone or never connected | logged and dropped; the operation has already been committed and answered |
+
+The client method is `StockChanged`, and its argument is:
+
+```json
+{
+  "change": "RECEIVE",
+  "productId": 5,
+  "warehouseId": 3,
+  "quantity": 10,
+  "currentQuantity": 14,
+  "minimumStockLevel": 10,
+  "destinationWarehouseId": null,
+  "destinationCurrentQuantity": null,
+  "origin": "4f2ab19c"
+}
+```
+
+`change` is `RECEIVE`, `ISSUE`, `TRANSFER` or `ADJUSTMENT`; `quantity` is the magnitude of the
+movement (the size of the correction, for an adjustment). A transfer fills the two destination fields
+and leaves `warehouseId` as the source. This is deliberately not the integration event: a screen needs
+the movement and the state it left behind, not the payload the Alert and Reporting services project.
+The hub protocol's field casing is not part of this contract — read it case-insensitively.
+
+### Who asked for it
+
+A caller may identify itself with the request header **`X-Origin-Id`** on a stock operation, and the
+value comes back as `origin` on the notification. Several people work the same system at once, and a
+screen that says "something moved" is less useful than one that says which of those movements was
+theirs; the console sends the station its browser belongs to, and a screen compares it with its own
+to tell "your receipt was confirmed" from "another terminal moved something".
+
+The label is sanitised before it is echoed: letters, digits, `-`, `_` and `.` are kept, up to 40
+characters, and a value with nothing usable in it is dropped along with the rest — so `dock-3` travels
+as `dock-3`, `  DOCK 7  ` as `DOCK7`, and `!!! ***` as no origin at all. **It is a label, not a
+credential**: nothing is authorised by it, it is visible to every client connected to the hub, and an
+operation without one is a perfectly ordinary operation (a script, a health check, another service).
+Authentication is the thing that will make "who" a real question, and it is not built yet.
+
+The hub is anonymous and read-only — there is no server method to call — and it is subject to the same
+CORS policy as the REST API: any origin in `Development`, and `Cors:AllowedOrigins` everywhere
+else, so a browser whose origin is not listed cannot connect. To check a hub is reachable:
+
+```bash
+curl -X POST "http://localhost:5102/hubs/stock/negotiate?negotiateVersion=1"
+# {"negotiateVersion":1,"connectionId":"...","availableTransports":[...]}
+```
 
 ## Health
 
