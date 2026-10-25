@@ -4,11 +4,11 @@ using InventorySystem.Stock.Application.Abstractions;
 using InventorySystem.Stock.Application.Catalog;
 using InventorySystem.Stock.Application.Dtos;
 using InventorySystem.Stock.Application.Exceptions;
+using InventorySystem.Stock.Application.Notifications;
 using InventorySystem.Stock.Domain.Entities;
 
 namespace InventorySystem.Stock.Application.Services;
 
- 
 public class InventoryService
 {
     private readonly IInventoryRepository _inventory;
@@ -16,19 +16,25 @@ public class InventoryService
     private readonly IProductCatalogClient _catalog;
     private readonly IEventOutbox _outbox;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IStockBroadcaster _broadcaster;
+    private readonly IStockChangeOrigin _origin;
 
     public InventoryService(
         IInventoryRepository inventory,
         IInventoryTransactionRepository transactions,
         IProductCatalogClient catalog,
         IEventOutbox outbox,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IStockBroadcaster broadcaster,
+        IStockChangeOrigin origin)
     {
         _inventory = inventory;
         _transactions = transactions;
         _catalog = catalog;
         _outbox = outbox;
         _unitOfWork = unitOfWork;
+        _broadcaster = broadcaster;
+        _origin = origin;
     }
 
     public async Task<PagedResult<InventoryDto>> GetAsync(InventoryQuery query, CancellationToken cancellationToken = default)
@@ -86,6 +92,14 @@ public class InventoryService
         });
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await BroadcastAsync(
+            StockChangeKind.RECEIVE,
+            request.ProductId,
+            request.WarehouseId,
+            request.Quantity,
+            newQuantity,
+            product.MinimumStockLevel,
+            cancellationToken);
 
         return ToDto(inventory);
     }
@@ -119,6 +133,14 @@ public class InventoryService
         });
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await BroadcastAsync(
+            StockChangeKind.ISSUE,
+            request.ProductId,
+            request.WarehouseId,
+            request.Quantity,
+            newQuantity,
+            product.MinimumStockLevel,
+            cancellationToken);
 
         return ToDto(inventory);
     }
@@ -173,6 +195,21 @@ public class InventoryService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // One notification for a transfer, carrying both legs: the two stock levels moved
+        // in the same commit, so a screen that redrew on only one of them would be wrong.
+        await _broadcaster.StockChangedAsync(
+            new StockChangeNotification(
+                StockChangeKind.TRANSFER,
+                request.ProductId,
+                request.SourceWarehouseId,
+                request.Quantity,
+                sourceQuantity,
+                product.MinimumStockLevel,
+                request.DestinationWarehouseId,
+                destinationQuantity,
+                _origin.Value),
+            cancellationToken);
+
         return new TransferResultDto(request.ProductId, request.Quantity, ToDto(source), ToDto(destination));
     }
 
@@ -202,9 +239,41 @@ public class InventoryService
         });
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await BroadcastAsync(
+            StockChangeKind.ADJUSTMENT,
+            request.ProductId,
+            request.WarehouseId,
+            Math.Abs(delta),
+            request.NewQuantity,
+            product.MinimumStockLevel,
+            cancellationToken);
 
         return ToDto(inventory);
     }
+
+    /// <summary>
+    /// Tells live subscribers what was just committed, and which terminal asked for it. It runs
+    /// after the commit, on purpose: a screen may be redrawn from this, and it must never be redrawn
+    /// before the change it is being told about is durable.
+    /// </summary>
+    private Task BroadcastAsync(
+        StockChangeKind change,
+        int productId,
+        int warehouseId,
+        int quantity,
+        int currentQuantity,
+        int minimumStockLevel,
+        CancellationToken cancellationToken) =>
+        _broadcaster.StockChangedAsync(
+            new StockChangeNotification(
+                change,
+                productId,
+                warehouseId,
+                quantity,
+                currentQuantity,
+                minimumStockLevel,
+                Origin: _origin.Value),
+            cancellationToken);
 
     private async Task<Inventory> GetOrCreateAsync(int productId, int warehouseId, CancellationToken cancellationToken)
     {

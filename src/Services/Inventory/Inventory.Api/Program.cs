@@ -1,5 +1,9 @@
+using InventorySystem.BuildingBlocks.Security;
+using InventorySystem.Stock.Api.Hubs;
 using InventorySystem.Stock.Api.Middleware;
+using InventorySystem.Stock.Api.Services;
 using InventorySystem.Stock.Application;
+using InventorySystem.Stock.Application.Abstractions;
 using InventorySystem.Stock.Infrastructure;
 using InventorySystem.Stock.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
@@ -14,6 +18,26 @@ builder.Services
     .AddInventoryApplication()
     .AddInventoryInfrastructure();
 
+// Live stock: one notification per committed operation, to every connected client.
+// The broadcaster is a singleton because it only holds the hub context, and it is
+// registered here rather than in the application layer because SignalR is a transport.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IStockBroadcaster, SignalRStockBroadcaster>();
+
+// The live view is the one door in this service a browser could once walk through: it is not a page
+// read, it is a connection that keeps sending. It therefore needs a token — see StockHub — and the
+// tokens are the ones the Identity service issues, read from the same Jwt:* configuration.
+builder.Services.AddInventoryJwtAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddAuthorization(authorization => authorization.AddPolicy(
+    JwtPolicies.StockRead,
+    policy => policy.RequireClaim(JwtClaimNames.Scope, JwtScopes.StockRead)));
+
+// Which terminal asked for an operation. The console sends its station in X-Origin-Id, and the
+// notification carries it back so a screen can tell its own movements from everybody else's.
+// This replaces the application layer's "nobody named it" default.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IStockChangeOrigin, StockChangeOrigin>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -25,11 +49,31 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// The MVC web app runs on a different origin in development.
+// The console runs on another origin: it is a page in a browser, not a service-to-service
+// call, and its live client opens a connection to the hub here. In Development any origin
+// is allowed, because the console's port belongs to whoever started it; everywhere else the
+// origins are named in Cors:AllowedOrigins, and an empty list means no browser may call
+// this service cross-origin at all.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+
 const string WebClientCorsPolicy = "web-client";
-builder.Services.AddCors(options => options.AddPolicy(
-    WebClientCorsPolicy,
-    policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+builder.Services.AddCors(options => options.AddPolicy(WebClientCorsPolicy, policy =>
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        policy.AllowAnyOrigin();
+    }
+    else if (allowedOrigins.Length > 0)
+    {
+        policy.WithOrigins(allowedOrigins);
+    }
+    else
+    {
+        return;
+    }
+
+    policy.AllowAnyHeader().AllowAnyMethod();
+}));
 
 var app = builder.Build();
 
@@ -65,10 +109,15 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    app.UseCors(WebClientCorsPolicy);
 }
 
+app.UseCors(WebClientCorsPolicy);
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
+app.MapHub<StockHub>(StockHub.Path);
 
 app.MapGet("/health", async (InventoryDbContext dbContext, CancellationToken cancellationToken) =>
 {
