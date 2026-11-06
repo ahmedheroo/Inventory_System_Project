@@ -1,0 +1,217 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: inventory-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-InventoryDB@123}"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: inventory-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:-inventory}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-inventory}"
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # management UI -> http://localhost:15672
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------------------------- the apps
+  # Product: products, categories and warehouses. Owns ProductDb, and the only service the two below
+  # call over HTTP — but only while answering a request, so they merely wait for it to be started.
+  product-api:
+    build:
+      context: .
+      args:
+        PROJECT: src/Services/Product/Product.Api/Product.Api.csproj
+    image: ${DOCKERHUB_USERNAME}/inventory-product-api
+    container_name: inventory-product-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      Database__Provider: SqlServer
+      ConnectionStrings__ProductDb: "Server=sqlserver,1433;Database=ProductDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-InventoryDB@123};TrustServerCertificate=True;MultipleActiveResultSets=True"
+    ports:
+      - "5251:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Identity: accounts, roles and the tokens. The signing key is the one thing that has to be given to
+  # it and to the Inventory service (which validates the tokens) and to nobody else.
+  identity-api:
+    build:
+      context: .
+      args:
+        PROJECT: src/Services/Identity/Identity.Api/Identity.Api.csproj
+    image: ${DOCKERHUB_USERNAME}/inventory-identity-api:${IMAGE_TAG:-1.0.0}
+    container_name: inventory-identity-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      Database__Provider: SqlServer
+      ConnectionStrings__IdentityDb: "Server=sqlserver,1433;Database=IdentityDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-InventoryDB@123};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      # Refused in Production if it is still the published development key.
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-inventory-development-signing-key-32-bytes-long}"
+    ports:
+      - "5402:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Inventory: stock levels, the four stock operations and the live hub. Validates every product and
+  # warehouse through the Product service, and publishes what it changes to RabbitMQ through its outbox.
+  inventory-api:
+    build:
+      context: .
+      args:
+        PROJECT: src/Services/Inventory/Inventory.Api/Inventory.Api.csproj
+    image: ${DOCKERHUB_USERNAME}/inventory-inventory-api:${IMAGE_TAG:-1.0.0}
+    container_name: inventory-inventory-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      Database__Provider: SqlServer
+      ConnectionStrings__InventoryDb: "Server=sqlserver,1433;Database=InventoryDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-InventoryDB@123};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-inventory-development-signing-key-32-bytes-long}"
+      Services__ProductApi__BaseUrl: "http://product-api:8080"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: "${RABBITMQ_USER:-inventory}"
+      RabbitMq__Password: "${RABBITMQ_PASSWORD:-inventory}"
+      RabbitMq__VirtualHost: "/"
+    ports:
+      - "5102:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      product-api:
+        condition: service_started
+    restart: unless-stopped
+
+  # Alert: projects the stock events into low-stock alerts. Consumes, never calls.
+  alert-api:
+    build:
+      context: .
+      args:
+        PROJECT: src/Services/Alert/Alert.Api/Alert.Api.csproj
+    image: ${DOCKERHUB_USERNAME}/inventory-alert-api:${IMAGE_TAG:-1.0.0}
+    container_name: inventory-alert-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      Database__Provider: SqlServer
+      ConnectionStrings__AlertDb: "Server=sqlserver,1433;Database=AlertDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-InventoryDB@123};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: "${RABBITMQ_USER:-inventory}"
+      RabbitMq__Password: "${RABBITMQ_PASSWORD:-inventory}"
+      RabbitMq__VirtualHost: "/"
+    ports:
+      - "5212:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Reporting: the same events projected into a read model, and the four reports that read it — which is
+  # why it also needs the Product service, for the sku, names and unit prices a report is enriched with.
+  reporting-api:
+    build:
+      context: .
+      args:
+        PROJECT: src/Services/Reporting/Reporting.Api/Reporting.Api.csproj
+    image: ${DOCKERHUB_USERNAME}/inventory-reporting-api:${IMAGE_TAG:-1.0.0}
+    container_name: inventory-reporting-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      Database__Provider: SqlServer
+      ConnectionStrings__ReportingDb: "Server=sqlserver,1433;Database=ReportingDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-InventoryDB@123};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Services__ProductApi__BaseUrl: "http://product-api:8080"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: "${RABBITMQ_USER:-inventory}"
+      RabbitMq__Password: "${RABBITMQ_PASSWORD:-inventory}"
+      RabbitMq__VirtualHost: "/"
+    ports:
+      - "5312:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      product-api:
+        condition: service_started
+    restart: unless-stopped
+
+  # The console a person works in. It owns no data and no database: every screen is built from the five
+  # service APIs, so a service that is not up yet is shown as such rather than as an empty table — which
+  # is also why only the Identity service has to be *healthy* before the console starts. Without it
+  # nobody can sign in, and every screen is behind the sign-in.
+  console:
+    build:
+      context: .
+      args:
+        PROJECT: src/Inventory.Web/Inventory.Web.csproj
+    image: ${DOCKERHUB_USERNAME}/inventory-console:${IMAGE_TAG:-1.0.0}
+    container_name: inventory-console
+    environment:
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
+      Services__ProductApi__BaseUrl: "http://product-api:8080"
+      Services__InventoryApi__BaseUrl: "http://inventory-api:8080"
+      Services__AlertApi__BaseUrl: "http://alert-api:8080"
+      Services__ReportingApi__BaseUrl: "http://reporting-api:8080"
+      Services__IdentityApi__BaseUrl: "http://identity-api:8080"
+    ports:
+      - "5159:8080"
+    depends_on:
+      identity-api:
+        condition: service_healthy
+      product-api:
+        condition: service_started
+      inventory-api:
+        condition: service_started
+      alert-api:
+        condition: service_started
+      reporting-api:
+        condition: service_started
+    # The console has no /health — it is a page, not a probe — so its health is the sign-in screen,
+    # which is the one thing that must answer before anything else can be used.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/sign-in -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:
+  rabbitmq-data:

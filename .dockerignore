@@ -1,0 +1,33 @@
+# What the daemon receives before the first instruction of the Dockerfile runs. Everything here is
+# either build output the image is about to produce for itself, local runtime state, or the
+# repository's paperwork.
+#
+# The first two patterns are the ones that matter: copying Windows-built bin/obj into a Linux build is
+# how a stale obj/project.assets.json or a Debug assembly from the host ends up inside the image.
+**/bin/
+**/obj/
+
+# Host tooling and repository metadata.
+.vs/
+.git/
+.gitignore
+.github/
+.freebuff/
+
+# Documents, never published and never needed to compile.
+docs/
+*.docx
+*.md
+
+# Local databases (the SQLite fallback writes these) and anything a run leaves behind.
+**/*.db
+**/*.db-shm
+**/*.db-wal
+artifacts/
+
+# Secrets, and the compose file itself: the images are built from, not with, these.
+.env
+*.env
+docker-compose*.yml
+Dockerfile
+.dockerignore
