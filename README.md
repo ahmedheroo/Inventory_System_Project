@@ -19,9 +19,8 @@ Framework Core**, **SQL Server**, **RabbitMQ**, **SignalR** and **Docker**.
 9. [Verifying the system end to end](#9-verifying-the-system-end-to-end)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Repository layout](#11-repository-layout)
-12. [Development guidelines](#12-development-guidelines)
-13. [Glossary](#13-glossary)
-14. [Further documentation](#14-further-documentation)
+12. [Glossary](#13-glossary)
+
 
 ---
 
