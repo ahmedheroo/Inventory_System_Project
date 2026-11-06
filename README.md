@@ -4,12 +4,6 @@ An educational microservices application that tracks inventory in real time, rai
 alerts automatically and produces inventory reports. Built with **ASP.NET Core 8**, **Entity
 Framework Core**, **SQL Server**, **RabbitMQ**, **SignalR** and **Docker**.
 
-> **Status:** Sprints 1–6 are implemented and tested (442 tests). The five services (Product,
-> Inventory, Alert, Reporting, Identity) communicate over REST and RabbitMQ with a transactional
-> outbox, and the MVC console provides sign-in and roles, a live dashboard, catalogue management,
-> stock levels, the four stock operations, alerts, and four reports with CSV/Excel downloads.
-> Task-by-task state and next steps: [docs/backlog-status.md](docs/backlog-status.md).
-
 ---
 
 ## Table of contents
@@ -176,19 +170,6 @@ machine account, all defined in the Identity domain:
 The console only draws the buttons a user's role can actually use. An account with an unknown role is
 refused at sign-in rather than guessed at.
 
-### Development accounts
-
-With seeding enabled (the default in `Development`):
-
-| Username | Role | Password |
-|----------|------|----------|
-| `manager` | Manager | `inventory-console-2026` |
-| `clerk` | Clerk | `inventory-console-2026` |
-| `viewer` | Viewer | `inventory-console-2026` |
-| `console` | Service (machine) | a separate service secret |
-
-> ⚠️ A Production run must set `Identity:Seed:Enabled=false` (or configure its own accounts) and
-> supply a strong `JWT_SIGNING_KEY` — the development key is refused in Production.
 
 ---
 
@@ -421,7 +402,7 @@ docker compose up -d --build   # SQL Server + RabbitMQ + five services + the con
 docker compose ps              # wait until all six apps are healthy
 ```
 
-A single [Dockerfile](Dockerfile) builds all six apps, with the project to publish passed as a build
+A single [docker-compose.yml](Dockerfile) builds all six apps, with the project to publish passed as a build
 argument. Each app migrates and seeds its own database on startup (the first start is usually the
 slowest), so a fresh clone is ready to sign in as soon as the console is healthy.
 
@@ -549,39 +530,7 @@ docs/                       API references, architecture, development and UI gui
 
 ---
 
-## 12. Development guidelines
-
-### Code conventions
-
-- **Namespaces:** `InventorySystem.<BoundedContext>.<Layer>`. The bounded-context segment must not
-  reuse an entity type name — the Product service uses `InventorySystem.Products.*` so the `Product`
-  entity stays unambiguous. See [docs/architecture.md](docs/architecture.md).
-- **Domain invariants live in the domain.** Rules such as "no negative stock" are enforced in
-  `Inventory.Domain`, not in controllers. Read the entity before adding a rule.
-- **One definition per concept.** Error responses (RFC 7807), event contracts, RabbitMQ names
-  (`MessagingTopology`) and role names (`WireName`) each have a single definition — reference the
-  constant, never copy the string.
-- **Migrations ship with the service** in `*.Infrastructure/Persistence/Migrations`, and each service
-  applies its own before it starts listening.
-- **The console draws only what a role allows.** Check `ConsoleAccess` before adding a screen or action.
-- **Tests travel with changes.** A rule change lands with its test; changing what an event means will
-  (and should) break the cross-service contract suite.
-
-### Workflow
-
-- **Commits:** conventional commits (`feat:`, `fix:`, `test:`, `refactor:`, `docs:`).
-- **Branches:** `main`, `develop`, `feature/*`, `bugfix/*`; changes reach `main` through pull requests.
-
-### Project background
-
-`Project_managment.docx` at the repository root holds the original backlog: thirteen epics from project
-setup to documentation, the four-developer split that shaped the code layout (Product + Identity ·
-Inventory · Messaging + Alerts + Reports · MVC + real-time), the dependency map explaining why the
-contracts project came first, and the sprint plan.
-
----
-
-## 13. Glossary
+## 12. Glossary
 
 | Term | Meaning |
 |------|---------|
@@ -596,18 +545,3 @@ contracts project came first, and the sprint plan.
 | **Minimum stock level** | The per-product threshold that turns an alert on and off |
 | **Console** | `Inventory.Web`, the web app people work in |
 | **Relay** | The console's machine account that keeps the live view open for everyone signed in |
-
----
-
-## 14. Further documentation
-
-| Document | Contents |
-|----------|----------|
-| [docs/architecture.md](docs/architecture.md) | Architecture decisions, outbox, namespaces |
-| [docs/development.md](docs/development.md) | Configuration, environments, migrations, production settings |
-| [docs/api.md](docs/api.md) | Product service request/response examples |
-| [docs/inventory-api.md](docs/inventory-api.md) | Inventory service reference |
-| [docs/alerts-api.md](docs/alerts-api.md) | Alert service reference |
-| [docs/reports-api.md](docs/reports-api.md) | Reporting service reference |
-| [docs/web-ui.md](docs/web-ui.md) | How the console is put together |
-| [docs/backlog-status.md](docs/backlog-status.md) | Task-by-task status and next steps |
