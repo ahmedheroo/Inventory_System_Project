@@ -1,263 +1,613 @@
 # Real-Time Inventory Management System
 
 An educational microservices application that tracks inventory in real time, raises low-stock
-alerts and produces inventory reports. Built with ASP.NET Core 8, Entity Framework Core,
-SQL Server, RabbitMQ, SignalR and Docker.
+alerts automatically and produces inventory reports. Built with **ASP.NET Core 8**, **Entity
+Framework Core**, **SQL Server**, **RabbitMQ**, **SignalR** and **Docker**.
 
-> **Status:** Sprints 1–6 are implemented and tested (442 tests): the five services (Product,
-> Inventory, Alert, Reporting, Identity) with RabbitMQ messaging and a transactional outbox, and the
-> MVC console that a manager and a clerk actually work in — sign-in and roles, dashboard, catalogue,
-> stock, the four stock operations, alerts and the four reports with CSV/Excel downloads. See
-> [docs/backlog-status.md](docs/backlog-status.md) for the task-by-task state and what comes next,
-> and [docs/web-ui.md](docs/web-ui.md) for how the console is put together.
+> **Status:** Sprints 1–6 are implemented and tested (442 tests). The five services (Product,
+> Inventory, Alert, Reporting, Identity) communicate over REST and RabbitMQ with a transactional
+> outbox, and the MVC console provides sign-in and roles, a live dashboard, catalogue management,
+> stock levels, the four stock operations, alerts, and four reports with CSV/Excel downloads.
+> Task-by-task state and next steps: [docs/backlog-status.md](docs/backlog-status.md).
 
-## Architecture at a glance
+---
+
+## Table of contents
+
+1. [Project objectives](#1-project-objectives)
+2. [Key features](#2-key-features)
+3. [Architecture](#3-architecture)
+4. [Users, roles and permissions](#4-users-roles-and-permissions)
+5. [Functional modules](#5-functional-modules)
+6. [API reference](#6-api-reference)
+7. [Security and reliability](#7-security-and-reliability)
+8. [Getting started](#8-getting-started)
+9. [Verifying the system end to end](#9-verifying-the-system-end-to-end)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Repository layout](#11-repository-layout)
+12. [Development guidelines](#12-development-guidelines)
+13. [Glossary](#13-glossary)
+14. [Further documentation](#14-further-documentation)
+
+---
+
+## 1. Project objectives
+
+The system exists to make the company's stock **visible, checkable and foreseeable**. Concretely, it
+aims to:
+
+1. **Maintain a single, trusted catalogue** of products, categories and warehouses that every other
+   part of the system relies on.
+2. **Record every stock movement** — goods received, issued, transferred between warehouses and
+   adjusted after a physical count — in an auditable, append-only ledger.
+3. **Warn the business before shelves run empty** by raising low-stock and out-of-stock alerts the
+   moment a quantity reaches a product's minimum stock level.
+4. **Answer the core business questions** — what do we hold, what is short, what moved, and what is
+   it worth — through filterable reports whose downloads match the screen exactly.
+5. **Keep every user's view current** with a web console whose tables and alert counts update live,
+   without a page refresh.
+
+As an educational project it also demonstrates a set of architectural practices: database-per-service
+microservices, event-driven integration, the transactional outbox pattern, idempotent consumers,
+read-model projections, role-based access with JWTs, and containerised deployment.
+
+---
+
+## 2. Key features
+
+- **Catalogue management** — products (SKU, price, minimum stock level), categories and warehouses,
+  with soft delete so nothing ever disappears from history.
+- **Four stock operations** — receive, issue, transfer and adjust, each written to the ledger and
+  announced as an event.
+- **Guaranteed integrity** — no negative stock, optimistic concurrency between operators, and stock
+  changes that are committed together with their events.
+- **Automatic alerts** — one alert per low-stock situation, refreshed while it lasts and resolved
+  when stock is replenished.
+- **Four reports** — inventory, low stock, stock movement and valuation, exportable as CSV or a real
+  `.xlsx` workbook.
+- **Live console** — a server-rendered MVC application that updates over SignalR and still works
+  fully without JavaScript.
+- **Role-based access** — Viewer, Clerk and Manager roles issued by a dedicated Identity service.
+- **One-command deployment** — `docker compose up` starts SQL Server, RabbitMQ and all six apps.
+
+---
+
+## 3. Architecture
+
+### 3.1 Overview
 
 ```
         ┌────────────────────────┐
         │  Inventory.Web (MVC)   │   Razor server-rendered console, no JS framework
         └───────────┬────────────┘
                     │ HTTP / SignalR
-   ┌────────────────┼────────────────┬─────────────────┐
-   ▼                ▼                ▼                 ▼
-┌──────────┐  ┌───────────┐   ┌───────────┐    ┌────────────┐
-│ Product  │  │ Inventory │   │  Alert    │    │ Reporting  │
-│ Service  │  │  Service  │   │  Service  │    │  Service   │
-└────┬─────┘  └─────┬─────┘   └─────▲─────┘    └─────▲──────┘
-     │              │               │                │
- ProductDb     InventoryDb      AlertDb         ReportingDb
-                    │  events
-                    ▼
-              ┌───────────┐
-              │ RabbitMQ  │
+   ┌────────────────┼────────────────┬─────────────────┬──────────────┐
+   ▼                ▼                ▼                 ▼              ▼
+┌──────────┐  ┌───────────┐   ┌───────────┐    ┌────────────┐  ┌──────────┐
+│ Product  │  │ Inventory │   │  Alert    │    │ Reporting  │  │ Identity │
+│ Service  │  │  Service  │   │  Service  │    │  Service   │  │ Service  │
+└────┬─────┘  └─────┬─────┘   └─────▲─────┘    └─────▲──────┘  └────┬─────┘
+     │              │               │                │              │
+ ProductDb     InventoryDb      AlertDb         ReportingDb     IdentityDb
+                    │  events       │                │
+                    ▼               │                │
+              ┌───────────┐         │                │
+              │ RabbitMQ  │─────────┴────────────────┘
               └───────────┘
 ```
 
-Every service owns its database; no service reads another service's database. Cross-service
-data flows through REST calls or RabbitMQ events, and the Inventory service writes each event to a
-transactional outbox in the same transaction as the stock change, so a broker outage delays events
-instead of losing them (see [docs/architecture.md](docs/architecture.md)).
+**Guiding principle:** every service owns its database, and no service reads another service's
+database. Data crosses service boundaries only through REST calls or RabbitMQ events.
 
-## Repository layout
+### 3.2 The six applications
+
+| # | Application | Owns | Dev port | Responsibility |
+|---|-------------|------|----------|----------------|
+| 1 | **Product** (`Product.Api`) | `ProductDb` | 5251 | The catalogue: products, categories, warehouses |
+| 2 | **Identity** (`Identity.Api`) | `IdentityDb` | 5402 | Accounts, roles, sign-in, signed tokens |
+| 3 | **Inventory** (`Inventory.Api`) | `InventoryDb` | 5102 | Stock levels, the four stock operations, the ledger, the live stock hub |
+| 4 | **Alert** (`Alert.Api`) | `AlertDb` | 5212 | Projects stock events into low-stock alerts |
+| 5 | **Reporting** (`Reporting.Api`) | `ReportingDb` | 5312 | Projects stock events into a read model; serves the four reports |
+| 6 | **Console** (`Inventory.Web`) | — | 5159 | The web application people work in; every screen is a view over the five services |
+
+### 3.3 Shared infrastructure
+
+- **SQL Server 2022** — host port `1433`, one database per service.
+- **RabbitMQ 3.13** — host ports `5672` (AMQP) and `15672` (management UI, default
+  `inventory` / `inventory` unless `.env` says otherwise).
+
+### 3.4 Internal structure of a service
+
+Each service follows a clean, layered structure of four projects:
+
+| Layer | Contents |
+|-------|----------|
+| `*.Domain` | Entities and business rules; no dependencies |
+| `*.Application` | Use-case services, DTOs, abstractions |
+| `*.Infrastructure` | EF Core persistence, repositories, migrations, messaging |
+| `*.Api` | HTTP surface, middleware, `Program.cs` composition root |
+
+(The Reporting service has no Domain project — it is a read model.)
+
+### 3.5 How a stock movement travels
 
 ```
-InventorySystem.sln
-Dockerfile                             the six apps, one recipe: which project to publish is a build argument
-docker-compose.yml                     SQL Server + RabbitMQ + the six apps
-src/
-  BuildingBlocks/
-    InventorySystem.BuildingBlocks.Contracts   shared event contracts + messaging topology
-    InventorySystem.BuildingBlocks.Messaging  RabbitMQ transport (publisher, consumer, options)
-  Inventory.Web/                               MVC console: the pages, the design system, the service clients
-  Services/    Product/        Product.Api / Application / Domain / Infrastructure   ✅ implemented
-    Inventory/      Inventory.Api / Application / Domain / Infrastructure ✅ implemented
-    Alert/          Alert.Api / Application / Domain / Infrastructure    ✅ implemented
-    Reporting/      Reporting.Api / Application / Infrastructure          ✅ implemented
-    Identity/       Identity.Api / Application / Domain / Infrastructure ✅ implemented
-tests/
-  Alert.Domain.Tests/           21 unit tests
-  Alert.Api.Tests/              22 HTTP integration tests
-  Products.Domain.Tests/        22 unit tests
-  Products.Api.Tests/           19 HTTP integration tests
-  Inventory.Domain.Tests/       33 unit tests
-  Inventory.Api.Tests/          58 HTTP integration tests (incl. concurrency, outbox, live broadcast)
-  Reporting.Api.Tests/          35 HTTP integration tests (projection, the four reports, the downloads)
-  Identity.Domain.Tests/        57 unit tests
-  Identity.Api.Tests/           41 HTTP integration tests
-  Inventory.Web.Tests/          120 console tests (sign-in, roles and sign-out, controllers, live regions, relay)
-  CrossService.Contracts.Tests/ 14 cross-service HTTP contract tests
-docs/                           api.md, inventory-api.md, alerts-api.md, reports-api.md, architecture.md, …
+Clerk acts in the console
+        │  (HTTP, after Identity sign-in)
+        ▼
+Inventory service ── verifies product/warehouse against ──► Product service (HTTP)
+        │  commit: stock change + ledger + outbox in ONE transaction
+        ▼
+Outbox dispatcher ──► RabbitMQ (exchange inventory.events, routing keys stock.*)
+        │
+        ├──► alert.inventory     ──► Alert service     (low-stock projection)
+        └──► reporting.inventory ──► Reporting service (read-model projection)
+
+Inventory service ── SignalR hub (/hubs/stock) ──► console relay ──► browsers (live tables)
 ```
 
-## Prerequisites
+- **Transactional outbox.** The Inventory service never publishes before commit. It writes each event
+  to an outbox table in the same transaction as the stock change, and a background dispatcher
+  publishes it afterwards. A movement and its announcement either both happen or neither does; a
+  broker outage delays events instead of losing them.
+- **Topic exchange.** Events go to `inventory.events` with routing keys `stock.received`,
+  `stock.issued`, `stock.transferred` and `stock.adjusted`.
+- **Shared contracts.** Event shapes live in `InventorySystem.BuildingBlocks.Contracts`; the
+  `CrossService.Contracts.Tests` suite fails the build if a publisher and a consumer drift apart.
+- **Idempotent consumers.** Both consumers keep a processed-event store keyed by event id, so a
+  redelivered message never creates a duplicate alert or double-counts a movement.
+- **Dead-lettering.** A message that still fails after one retry lands in a `*.inventory.dead` queue,
+  visible in the RabbitMQ UI — never dropped silently, never blocking the queue.
 
-- .NET SDK 8.0 or later (developed against 8.0 / 9.0 SDK)
+---
+
+## 4. Users, roles and permissions
+
+People never call the APIs directly; they sign in to the console. There are three human roles and one
+machine account, all defined in the Identity domain:
+
+| Role | Typical user | Permissions |
+|------|--------------|-------------|
+| **Viewer** | floor staff, auditors | Browse every screen, the live view and the reports; change nothing |
+| **Clerk** | dock / warehouse clerks | Everything a Viewer can, **plus** move stock (receive, issue, transfer, adjust) and acknowledge alerts |
+| **Manager** | office manager | Everything a Clerk can, **plus** maintain the catalogue (create/edit/deactivate products, categories, warehouses) |
+| **Service** (`console`) | not a person — the console's relay | Follows the Inventory service's live feed on behalf of everyone signed in; internal only |
+
+The console only draws the buttons a user's role can actually use. An account with an unknown role is
+refused at sign-in rather than guessed at.
+
+### Development accounts
+
+With seeding enabled (the default in `Development`):
+
+| Username | Role | Password |
+|----------|------|----------|
+| `manager` | Manager | `inventory-console-2026` |
+| `clerk` | Clerk | `inventory-console-2026` |
+| `viewer` | Viewer | `inventory-console-2026` |
+| `console` | Service (machine) | a separate service secret |
+
+> ⚠️ A Production run must set `Identity:Seed:Enabled=false` (or configure its own accounts) and
+> supply a strong `JWT_SIGNING_KEY` — the development key is refused in Production.
+
+---
+
+## 5. Functional modules
+
+### 5.1 Catalogue — Product service
+
+The reference data every other service trusts:
+
+- **Products** — unique, upper-cased SKU (changed only through a dedicated endpoint), name,
+  description, category, unit price, **minimum stock level** (the threshold the Alert service
+  watches) and an `isActive` flag.
+- **Categories** — unique names, with a per-category product count.
+- **Warehouses** — unique codes, names and addresses.
+
+Rules:
+
+- Deleting a product or warehouse is a **soft delete** (deactivation); nothing disappears from a ledger
+  or a report. A deactivated warehouse cannot take part in a new stock operation.
+- Deleting a category is refused while products still reference it.
+- List endpoints are paged (`page` / `pageSize`, clamped to 1..100) and most support search.
+
+### 5.2 Stock — Inventory service
+
+The Inventory service stores **quantities and the ledger only** — no names, prices or minimums. Every
+operation first resolves the product and warehouse against the Product service; if it is unreachable
+the request fails with `503` rather than being accepted on a guess.
+
+| Operation | Effect on stock | Ledger entries | Event |
+|-----------|-----------------|----------------|-------|
+| **Receive** | Quantity increases; the stock row is created if new | `RECEIVE` | `stock.received` |
+| **Issue** | Quantity decreases; refused if it exceeds what is available | `ISSUE` | `stock.issued` |
+| **Transfer** | Moves stock between warehouses in one commit — both legs or neither | `TRANSFER_OUT` + `TRANSFER_IN` | `stock.transferred` |
+| **Adjust** | Sets the quantity to the physically counted figure | `ADJUSTMENT` | `stock.adjusted` |
+
+Every ledger entry records product, warehouse, quantity and an optional `reference` (e.g. `PO-1`,
+`SO-77`, "Annual count"). Each operation returns the fresh stock level(s) so the operator sees the
+result immediately.
+
+Two protections:
+
+- **No negative stock** — issuing more than is on hand is refused with `400`.
+- **Optimistic concurrency** — if two operators race on the same stock row, the second is refused with
+  `409` and asked to reload, instead of silently overwriting a colleague's change.
+
+### 5.3 Alerts — Alert service
+
+Alerts exist only as a projection of real stock events; there is deliberately **no create endpoint**.
+
+- **One alert per situation, not per event.** When a product in a warehouse drops to or below its
+  minimum, one alert becomes active (`LOW_STOCK`, or `OUT_OF_STOCK` at zero). Further events while
+  the condition holds refresh that alert rather than adding new ones.
+- **Replenishment resolves, history stays.** When stock rises above the minimum the alert is marked
+  `RESOLVED` and kept; a later drop starts a new alert.
+- **Transfers evaluate both warehouses**, so one transfer can raise an alert at the source and resolve
+  one at the destination.
+- **Read state survives.** Marking an alert read is idempotent, and refreshing the same condition never
+  makes it unread again.
+
+### 5.4 Reports — Reporting service
+
+The Reporting service projects the event stream into a lightweight read model (`StockLevelSnapshot`,
+one row per product and warehouse, and an append-only `StockMovement` ledger), de-duplicated on event id.
+
+| Report | Answers |
+|--------|---------|
+| **Inventory** | What do we hold now, where, and what is it worth — with low/out-of-stock flags and totals |
+| **Low stock** | What is at or below its minimum right now, with the shortfall, worst first |
+| **Stock movement** | What moved, when and in which direction — paged, with a summary |
+| **Valuation** | `quantity × unitPrice` per product and warehouse, plus a per-warehouse roll-up |
+
+All reports share the same filters (date range, warehouse, product, SKU search) and can be downloaded
+as CSV or `.xlsx` with exactly the rows, order and totals shown on screen (the export contains **every**
+matching row, not just the current page).
+
+Things to know:
+
+- Because the read model is a projection, a just-executed movement may take a moment to appear in a
+  report; the current-stock screens read the Inventory service directly.
+- SKUs, names and unit prices come from the Product service, so value columns follow catalogue prices,
+  and the reports return `503` rather than an empty report if that service is down.
+
+### 5.5 The console — Inventory.Web
+
+An ASP.NET Core MVC application (port 5159) that owns **no data and no database**; every screen is
+built from the service APIs.
+
+| Route | Screen | Source |
+|-------|--------|--------|
+| `/sign-in`, `/sign-in/denied` | Sign-in and refusal page | Identity |
+| `/` | Overview: position per warehouse, shortages, last movements, open alerts | All services |
+| `/products`, `/products/new`, `/products/{id}/edit` | Product list, creation, edit (SKU, deactivate/reactivate) | Product |
+| `/categories`, `/warehouses` | Categories and warehouses with inline create/edit forms | Product |
+| `/inventory`, `/inventory/history` | Stock levels (against the catalogue minimum) and the movement ledger | Inventory |
+| `/inventory/receive`, `/issue`, `/transfer`, `/adjust` | The four stock operations, each ending on the changed row | Inventory |
+| `/alerts` | Active/resolved alerts; acknowledge one or a batch | Alert |
+| `/reports/inventory`, `/low-stock`, `/movement`, `/valuation` | The four reports with filters, totals, pager and CSV/Excel | Reporting |
+| `/reports/{report}/export?format=csv\|xlsx` | Downloads, proxied so the browser only talks to the console | Reporting |
+
+Defining behaviours:
+
+- **Honest about outages.** A service that is down is shown as unavailable, never as an empty table.
+  Only the Identity service must be healthy before the console starts, since every screen sits behind
+  sign-in (a fallback policy protects any screen added later).
+- **Live updates.** The overview and `/inventory` follow the Inventory service's SignalR hub
+  (`/hubs/stock`) through the console's relay and re-read their server-rendered regions when stock
+  moves; the alert count in the navigation rail stays current on every screen. Each browser carries an
+  opaque station id, so a screen can say whose movement it was — *"your movement of 6 units is
+  confirmed"* or *"another terminal moved 5 units"*.
+- **Progressive enhancement.** Without JavaScript, or with the hub unreachable, every screen still works
+  as served.
+- **Session handling.** The console asks Identity to verify the username and password, then issues its
+  own session cookie. The user's token is not kept in the browser, and the browser never talks to the
+  Inventory service directly.
+
+See [docs/web-ui.md](docs/web-ui.md) for details on downloads, timestamps and live regions.
+
+---
+
+## 6. API reference
+
+In Development every service exposes Swagger UI at `/swagger`. All APIs return errors as RFC 7807
+`application/problem+json`.
+
+### Product service — `http://localhost:5251`
+
+| Method | Route | Purpose |
+| ------ | ----- | ------- |
+| GET | `/api/products` | List / search / filter / page |
+| GET | `/api/products/{id}` | Product details |
+| POST | `/api/products` | Create a product |
+| PUT | `/api/products/{id}` | Update a product |
+| PUT | `/api/products/{id}/sku` | Change a SKU |
+| DELETE | `/api/products/{id}` | Deactivate (soft delete) |
+| POST | `/api/products/{id}/activate` | Reactivate |
+| GET/POST/PUT/DELETE | `/api/categories[/{id}]` | Category management |
+| GET/POST/PUT/DELETE | `/api/warehouses[/{id}]` | Warehouse management |
+| GET | `/health` | Health probe |
+
+Examples: [docs/api.md](docs/api.md)
+
+### Inventory service — `http://localhost:5102`
+
+| Method | Route | Purpose |
+| ------ | ----- | ------- |
+| GET | `/api/inventory` | Current stock (filter by product/warehouse, paged) |
+| GET | `/api/inventory/{productId}` | Stock of one product across warehouses |
+| GET | `/api/inventory/history` | Stock ledger (filter by product/warehouse/type/date, paged) |
+| POST | `/api/inventory/receive` | Receive stock |
+| POST | `/api/inventory/issue` | Issue stock (refused if it exceeds what is available) |
+| POST | `/api/inventory/transfer` | Move stock between warehouses (records both legs) |
+| POST | `/api/inventory/adjust` | Set an absolute counted quantity |
+| GET | `/health` | Health probe |
+
+Examples: [docs/api.md](docs/api.md), [docs/inventory-api.md](docs/inventory-api.md)
+
+### Alert service — `http://localhost:5212`
+
+| Method | Route | Purpose |
+| ------ | ----- | ------- |
+| GET | `/api/alerts` | List alerts (filter by product/warehouse/type/read state/status; active by default; paged, newest first) |
+| GET | `/api/alerts/{id}` | One alert |
+| PUT | `/api/alerts/{id}/read` | Mark as read (idempotent) |
+| GET | `/health` | Health probe |
+
+Use `status=1` to see resolved alerts. Details: [docs/alerts-api.md](docs/alerts-api.md)
+
+### Reporting service — `http://localhost:5312`
+
+| Method | Route | Purpose |
+| ------ | ----- | ------- |
+| GET | `/api/reports/inventory` | Current stock levels with value, totals over the filtered set |
+| GET | `/api/reports/low-stock` | Stock at or below its minimum, with the shortfall, worst first |
+| GET | `/api/reports/movement` | Movement ledger (product/warehouse/type/date filters, paged, with a summary) |
+| GET | `/api/reports/valuation` | `quantity × unitPrice` per product/warehouse, plus a per-warehouse roll-up |
+| GET | `/api/reports/{report}/export?format=csv\|xlsx` | The report as a file: same filters, every matching row |
+| GET | `/health` | Health probe |
+
+Details: [docs/reports-api.md](docs/reports-api.md)
+
+### Identity service — `http://localhost:5402`
+
+Accounts, roles, sign-in and token issuing. Browse the endpoints at `/swagger`.
+
+---
+
+## 7. Security and reliability
+
+**Security**
+
+- **Signed tokens.** The Identity service signs JWTs with `Jwt:SigningKey`; only the services that must
+  validate those tokens hold the key.
+- **Machine accounts have one ability.** The console relay has its own `service` role, never a copy of a
+  person's permissions.
+- **Server-side sessions.** Users hold a console session cookie, not a token.
+- **Protected by default.** Every console screen requires sign-in through a fallback authorisation policy.
+
+**Consistent errors**
+
+| Situation | Status |
+|-----------|--------|
+| Malformed payload or violated business rule | `400` |
+| Resource not found | `404` |
+| Uniqueness or concurrency conflict | `409` |
+| A dependency is unreachable | `503` (never reported as a bad request) |
+
+**Reliability**
+
+- Transactional outbox — no lost or premature events.
+- Idempotent consumers — redeliveries are harmless.
+- Dead-letter queues — poison messages are isolated and visible.
+- Truthful health checks — each `/health` reflects the service's own database, and `docker compose`
+  waits on those checks rather than on open ports.
+- Graceful degradation — without RabbitMQ the services keep running and events wait in the outbox.
+
+---
+
+## 8. Getting started
+
+### Prerequisites
+
+- .NET SDK 8.0 or later (developed against the 8.0 / 9.0 SDK)
 - Docker Desktop (optional for local development, required for `docker compose`)
-
-## Quick start
 
 ### Option A — everything in containers
 
 ```bash
-cp .env.example .env           # passwords, the environment, the token signing key
-docker compose up -d --build   # SQL Server + RabbitMQ + the five services + the console
+cp .env.example .env           # passwords, environment, token signing key
+docker compose up -d --build   # SQL Server + RabbitMQ + five services + the console
+docker compose ps              # wait until all six apps are healthy
 ```
 
-One command builds the six apps from the single [Dockerfile](Dockerfile) — one recipe, with the project
-to publish as its build argument — starts them next to the two pieces of infrastructure, and waits for
-their health checks. Each app migrates its own database and seeds what it owns on startup, so a fresh
-clone signs in as soon as the console is healthy (`docker compose ps`).
+A single [Dockerfile](Dockerfile) builds all six apps, with the project to publish passed as a build
+argument. Each app migrates and seeds its own database on startup (the first start is usually the
+slowest), so a fresh clone is ready to sign in as soon as the console is healthy.
 
 | What | Where |
 | ---- | ----- |
 | Console | <http://localhost:5159> — `manager`, `clerk` or `viewer`, password `inventory-console-2026` |
-| Product service | <http://localhost:5251> · `/swagger` |
-| Inventory service | <http://localhost:5102> · `/swagger` |
-| Alert service | <http://localhost:5212> · `/swagger` |
-| Reporting service | <http://localhost:5312> · `/swagger` |
-| Identity service | <http://localhost:5402> · `/swagger` |
-| RabbitMQ | <http://localhost:15672> — `inventory` / `inventory` |
+| Product service | <http://localhost:5251/swagger> |
+| Inventory service | <http://localhost:5102/swagger> |
+| Alert service | <http://localhost:5212/swagger> |
+| Reporting service | <http://localhost:5312/swagger> |
+| Identity service | <http://localhost:5402/swagger> |
+| RabbitMQ UI | <http://localhost:15672> — `inventory` / `inventory` |
+| SQL Server | `localhost,1433` |
 
-`docker compose logs -f console` follows one app's output, and `docker compose up -d --build
-inventory-api` rebuilds just that one after a change. The port numbers are the ones a local run uses,
-so every URL in this README works either way. What the apps are given (and what a production run has to
-supply instead) is in [development.md §4](docs/development.md).
-
-### Option B — the code on the host
-
-Debugging it is easier from the host, against the same two containers:
+Useful commands:
 
 ```bash
-# 1. Optional: shared infrastructure (RabbitMQ, and SQL Server when you want it)
+docker compose logs -f console              # follow one app's output
+docker compose up -d --build inventory-api  # rebuild a single app after a change
+```
+
+Ports are identical to a local run, so every URL in this README works either way. What a production run
+must supply instead is described in [docs/development.md §4](docs/development.md).
+
+### Option B — services on the host (easier debugging)
+
+```bash
+# 1. Optional: shared infrastructure
 cp .env.example .env
 docker compose up -d sqlserver rabbitmq
 
-# 2. Run the Product service (http://localhost:5251) — owns products, categories, warehouses
+# 2. Product service (5251) — start first; Inventory and Reporting depend on it
 dotnet run --project src/Services/Product/Product.Api
 
-# 3. Run the Inventory service (http://localhost:5102) in a second terminal
-#    It validates products/warehouses through the Product service, so start that first.
+# 3. Inventory service (5102)
 dotnet run --project src/Services/Inventory/Inventory.Api
 
-# 4. Run the Alert service (http://localhost:5212) in a third terminal — consumes stock events
+# 4. Alert service (5212) — consumes stock events
 dotnet run --project src/Services/Alert/Alert.Api
 
-# 5. Run the Reporting service (http://localhost:5312) in a fourth terminal — projects the same
-#    events into its read model and serves the reports
-#    It reads sku/names/prices from the Product service, so start that first.
+# 5. Reporting service (5312) — projects events and serves reports
 dotnet run --project src/Services/Reporting/Reporting.Api
 
-# 6. Run the Identity service (http://localhost:5402) in a fifth terminal — accounts, roles and the
-#    tokens the rest of the system validates. The console signs people in through it.
+# 6. Identity service (5402) — accounts, roles and tokens
 dotnet run --project src/Services/Identity/Identity.Api
 
-# 7. Run the console (http://localhost:5159) in a sixth terminal — it reads the five services above
+# 7. The console (5159)
 dotnet run --project src/Inventory.Web
-
-# 8. Run the tests (no broker, no service and no database needed)
-dotnet test
 ```
 
-A stock change then flows end to end: Inventory commits the change together with its event and
-announces it on its SignalR hub, the outbox dispatcher hands the event to RabbitMQ, the Alert service
-raises a low-stock alert that `GET /api/alerts` returns, and the Reporting service moves the product's
-stock level and appends the movement that `GET /api/reports/*` reports. An open console screen
-re-reads itself when that announcement arrives, so two browser windows on the same system agree
-without anybody reloading. Without RabbitMQ the services still run — events wait in the outbox (see
-`RabbitMq:Enabled` in [docs/development.md](docs/development.md)).
+Run each command in its own terminal.
 
-**Without any container:** each service falls back to its own local SQLite file (`product.dev.db`,
-`inventory.dev.db`, `alert.dev.db`, `reporting.dev.db`, `identity.dev.db`), so all five run
-immediately — the Product service also seeds a small sample catalogue and the Identity service
-seeds the three accounts you sign in with (`manager`, `clerk`, `viewer`; password
-`inventory-console-2026`). To run on SQL Server instead, start the container and migrate every
-database (seeded) as in [development.md §6](docs/development.md), or set `Database:Provider` to
-`SqlServer` (`Database__Provider=SqlServer` as an environment variable) for each service.
+### Running without any containers
 
-In Development each service exposes Swagger UI: `http://localhost:5251/swagger` (Product),
-`http://localhost:5102/swagger` (Inventory), `http://localhost:5212/swagger` (Alert) and
-`http://localhost:5312/swagger` (Reporting).
+Each service falls back to a local SQLite file (`product.dev.db`, `inventory.dev.db`, `alert.dev.db`,
+`reporting.dev.db`, `identity.dev.db`), so everything runs immediately. The Product service seeds a
+small sample catalogue and the Identity service seeds the development accounts. Without RabbitMQ the
+services still run and events wait in the outbox (see `RabbitMq:Enabled` in
+[docs/development.md](docs/development.md)).
 
-## Product service API
+To use SQL Server instead, start the container and migrate every database as described in
+[docs/development.md §6](docs/development.md), or set `Database__Provider=SqlServer` for each service.
 
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/products` | list / search / filter / page |
-| GET | `/api/products/{id}` | product details |
-| POST | `/api/products` | create a product |
-| PUT | `/api/products/{id}` | update a product |
-| PUT | `/api/products/{id}/sku` | change a SKU |
-| DELETE | `/api/products/{id}` | deactivate (soft delete) |
-| POST | `/api/products/{id}/activate` | reactivate |
-| GET/POST/PUT/DELETE | `/api/categories[/{id}]` | category management |
-| GET/POST/PUT/DELETE | `/api/warehouses[/{id}]` | warehouse management |
-| GET | `/health` | health probe |
+### Build and test
 
-Request/response examples: [docs/api.md](docs/api.md).
+```bash
+dotnet build InventorySystem.sln
+dotnet test  InventorySystem.sln   # no broker, service or database needed
+```
 
-## Inventory service API
+---
 
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/inventory` | current stock (filter by product/warehouse, paged) |
-| GET | `/api/inventory/{productId}` | stock of one product across warehouses |
-| GET | `/api/inventory/history` | stock ledger (filter by product/warehouse/type/date, paged) |
-| POST | `/api/inventory/receive` | receive stock |
-| POST | `/api/inventory/issue` | issue stock (refused if it exceeds what is available) |
-| POST | `/api/inventory/transfer` | move stock between warehouses (records both legs) |
-| POST | `/api/inventory/adjust` | set an absolute counted quantity |
-| GET | `/health` | health probe |
+## 9. Verifying the system end to end
 
-Every successful stock change appends a transaction and queues a stock event
-(`stock.received`, `stock.issued`, `stock.transferred`, `stock.adjusted`) in the outbox; the
-dispatcher delivers it to RabbitMQ independently of the HTTP request.
+1. Sign in as **manager**; create a category, two warehouses and a product (note its SKU and minimum
+   stock level).
+2. Sign in as **clerk**; receive 20 units, issue 5, transfer the rest to the second warehouse, and
+   adjust once.
+3. Check `/inventory/history` for the exact ledger rows, and `/alerts` as the quantity crosses the
+   minimum.
+4. Open the console in a second browser or profile — movements should appear there within a second,
+   without refreshing.
+5. Open the four reports and download one as CSV.
+6. In the RabbitMQ UI, confirm traffic on `inventory.events` and no messages in the `*.dead` queues.
 
-Full request/response examples: [docs/api.md](docs/api.md) and [docs/inventory-api.md](docs/inventory-api.md).
+---
 
-## Alert service API
+## 10. Troubleshooting
 
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/alerts` | list alerts (filter by product/warehouse/type/read state/status; active by default; paged, newest first) |
-| GET | `/api/alerts/{id}` | one alert |
-| PUT | `/api/alerts/{id}/read` | mark as read (idempotent) |
-| GET | `/health` | health probe |
+| Symptom | Likely cause | Where to look |
+|---------|--------------|---------------|
+| Console is up but screens show a service as unavailable | That service is still starting or has crashed | `docker compose logs <service>` and its `/health` |
+| Stock operation fails with `503 The Product service could not be reached` | `product-api` is not running | `docker compose ps` / logs |
+| Sign-in always rejects | Identity service down, or Production mode with seeding off and no accounts | Identity logs, `Identity:Seed:*` settings |
+| A queue stalls with old messages unhandled | A poison event | The `*.inventory.dead` queue in the RabbitMQ UI |
+| Live tables do not update | The relay lost its hub connection | Console logs (`StockRelay`); pages reconnect, or reload |
+| `409` on a stock operation | Two operators raced on the same row | Harmless — reload and retry |
+| A report is missing a movement just made | The projection has not caught up yet | Wait a moment; check RabbitMQ queue depth |
 
-There is no create endpoint on purpose: alerts are raised by the consumer when a stock event reports
-a quantity at or below the product's minimum stock level. The alerts are refreshed rather than
-duplicated while the condition lasts, resolved when stock comes back, and a redelivered event is
-ignored. Details: [docs/alerts-api.md](docs/alerts-api.md).
+---
 
-## Reporting service API
+## 11. Repository layout
 
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/reports/inventory` | current stock levels with value, totals over the filtered set |
-| GET | `/api/reports/low-stock` | stock at or below its minimum, with the shortfall, worst first |
-| GET | `/api/reports/movement` | the movement ledger (product/warehouse/type/date filters, paged, with a summary) |
-| GET | `/api/reports/valuation` | `quantity × unitPrice` per product/warehouse, plus a per-warehouse roll-up |
-| GET | `/api/reports/{report}/export?format=csv\|xlsx` | the report as a file: same filters, **every** matching row, CSV or a real .xlsx workbook |
-| GET | `/health` | health probe |
+```
+InventorySystem.sln
+Dockerfile                  one recipe for all six apps (project chosen by build argument)
+docker-compose.yml          SQL Server + RabbitMQ + the six apps
+.env.example                template for passwords, environment and signing key
+src/
+  BuildingBlocks/
+    InventorySystem.BuildingBlocks.Contracts   integration events, RabbitMQ topology, serialization
+    InventorySystem.BuildingBlocks.Messaging   RabbitMQ publisher, consumer, connection plumbing
+    InventorySystem.BuildingBlocks.Security    shared JWT validation vocabulary
+  Services/
+    Product/     Product.Api / Application / Domain / Infrastructure
+    Inventory/   Inventory.Api / Application / Domain / Infrastructure
+    Alert/       Alert.Api / Application / Domain / Infrastructure
+    Reporting/   Reporting.Api / Application / Infrastructure
+    Identity/    Identity.Api / Application / Domain / Infrastructure
+  Inventory.Web/            the console: pages, design system, service clients, SignalR relay
+tests/                      *.Domain.Tests and *.Api.Tests per service, Inventory.Web.Tests,
+                            CrossService.Contracts.Tests
+docs/                       API references, architecture, development and UI guides
+```
 
-ReportingDb is a **read model**, not a second inventory: one row per (product, warehouse) plus an
-append-only movement ledger, projected from the stock events in its own `reporting.inventory` queue
-and de-duplicated on the event id. The reports resolve sku, names and unit prices from the Product
-service, so they answer `503` rather than an empty report when it is down. Details and examples:
-[docs/reports-api.md](docs/reports-api.md).
+---
 
-## The console (Inventory.Web)
+## 12. Development guidelines
 
-Runs on `http://localhost:5159` and owns no data: every screen is built from the service APIs, so a
-service that is down is reported as such rather than shown as an empty table. Every screen also sits
-behind a sign-in: the console asks the Identity service whether a username and a password are an
-account and then keeps a session cookie of its own — the person's token is not kept, and what the
-console sends to the Inventory service's live stock view is the console's own credential.
+### Code conventions
 
-| Route | Screen |
-| ----- | ------ |
-| `/sign-in`, `/sign-in/denied` | sign-in (`manager`, `clerk`, `viewer` in Development) and the refusal page |
-| `/` | overview: position per warehouse, what is short, the last movements, open alerts |
-| `/products`, `/products/new`, `/products/{id}/edit` | product list, creation, edit (sku, deactivate/reactivate) |
-| `/categories`, `/warehouses` | categories and warehouses, with their create/edit forms on the page |
-| `/inventory`, `/inventory/history` | stock levels (state read against the catalogue minimum) and the movement ledger |
-| `/inventory/receive`, `/issue`, `/transfer`, `/adjust` | the four stock operations, each ending on the row it changed |
-| `/alerts` | active/resolved alerts, acknowledge one or a batch |
-| `/reports/inventory`, `/low-stock`, `/movement`, `/valuation` | the four reports, filters, totals, pager + CSV/Excel |
-| `/reports/{report}/export?format=csv\|xlsx` | the download, proxied so the browser only talks to the console |
+- **Namespaces:** `InventorySystem.<BoundedContext>.<Layer>`. The bounded-context segment must not
+  reuse an entity type name — the Product service uses `InventorySystem.Products.*` so the `Product`
+  entity stays unambiguous. See [docs/architecture.md](docs/architecture.md).
+- **Domain invariants live in the domain.** Rules such as "no negative stock" are enforced in
+  `Inventory.Domain`, not in controllers. Read the entity before adding a rule.
+- **One definition per concept.** Error responses (RFC 7807), event contracts, RabbitMQ names
+  (`MessagingTopology`) and role names (`WireName`) each have a single definition — reference the
+  constant, never copy the string.
+- **Migrations ship with the service** in `*.Infrastructure/Persistence/Migrations`, and each service
+  applies its own before it starts listening.
+- **The console draws only what a role allows.** Check `ConsoleAccess` before adding a screen or action.
+- **Tests travel with changes.** A rule change lands with its test; changing what an event means will
+  (and should) break the cross-service contract suite.
 
-The overview and `/inventory` are **live**: they follow the Inventory service's hub
-(`/hubs/stock`) and re-read their own server-rendered regions when stock moves, and the rail's alert
-count keeps itself current on every screen (a movement in one window appears in another without a
-reload). Each browser carries an opaque station, so a screen also says *whose* movement it was —
-`your movement of 6 units is confirmed` or `another terminal moved 5 units`. Nothing is required for a
-page to render — without JavaScript or with the hub unreachable, every screen works as it is served.
-Downloads, timestamps, where a name comes from and how the live regions behave are documented in
-[docs/web-ui.md](docs/web-ui.md); the console's own tests live in `tests/Inventory.Web.Tests`.
+### Workflow
 
-## Conventions
-
-- **Namespaces:** `InventorySystem.<BoundedContext>.<Layer>`, where the bounded-context segment
-  must not reuse an entity type name (the Product service uses `InventorySystem.Products.*` so the
-  `Product` entity stays unambiguous). See [docs/architecture.md](docs/architecture.md).
 - **Commits:** conventional commits (`feat:`, `fix:`, `test:`, `refactor:`, `docs:`).
 - **Branches:** `main`, `develop`, `feature/*`, `bugfix/*`; changes reach `main` through pull requests.
+
+### Project background
+
+`Project_managment.docx` at the repository root holds the original backlog: thirteen epics from project
+setup to documentation, the four-developer split that shaped the code layout (Product + Identity ·
+Inventory · Messaging + Alerts + Reports · MVC + real-time), the dependency map explaining why the
+contracts project came first, and the sprint plan.
+
+---
+
+## 13. Glossary
+
+| Term | Meaning |
+|------|---------|
+| **Catalogue** | Reference data — products, categories, warehouses (owned by the Product service) |
+| **Stock level** | One product in one warehouse and its quantity |
+| **Ledger / history** | Append-only transaction rows: `RECEIVE`, `ISSUE`, `TRANSFER_IN`, `TRANSFER_OUT`, `ADJUSTMENT` |
+| **Movement** | Any ledger entry; a transfer produces two |
+| **Event** | The JSON announcement of a movement, published with a `stock.*` routing key |
+| **Outbox** | Events staged in the same transaction as the movement and published afterwards |
+| **Projection** | What Alert or Reporting derives from the events — not a copy of another service's table |
+| **Alert** | One low-stock *situation* at a warehouse, active until replenishment resolves it |
+| **Minimum stock level** | The per-product threshold that turns an alert on and off |
+| **Console** | `Inventory.Web`, the web app people work in |
+| **Relay** | The console's machine account that keeps the live view open for everyone signed in |
+
+---
+
+## 14. Further documentation
+
+| Document | Contents |
+|----------|----------|
+| [docs/architecture.md](docs/architecture.md) | Architecture decisions, outbox, namespaces |
+| [docs/development.md](docs/development.md) | Configuration, environments, migrations, production settings |
+| [docs/api.md](docs/api.md) | Product service request/response examples |
+| [docs/inventory-api.md](docs/inventory-api.md) | Inventory service reference |
+| [docs/alerts-api.md](docs/alerts-api.md) | Alert service reference |
+| [docs/reports-api.md](docs/reports-api.md) | Reporting service reference |
+| [docs/web-ui.md](docs/web-ui.md) | How the console is put together |
+| [docs/backlog-status.md](docs/backlog-status.md) | Task-by-task status and next steps |
