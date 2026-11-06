@@ -402,7 +402,7 @@ docker compose up -d --build   # SQL Server + RabbitMQ + five services + the con
 docker compose ps              # wait until all six apps are healthy
 ```
 
-A single [docker-compose.yml](Dockerfile) builds all six apps, with the project to publish passed as a build
+A single [Dockerfile](Dockerfile) builds all six apps, with the project to publish passed as a build
 argument. Each app migrates and seeds its own database on startup (the first start is usually the
 slowest), so a fresh clone is ready to sign in as soon as the console is healthy.
 
