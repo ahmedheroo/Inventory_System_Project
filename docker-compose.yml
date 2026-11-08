@@ -49,7 +49,7 @@ services:
       context: .
       args:
         PROJECT: src/Services/Product/Product.Api/Product.Api.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-product-api
+    image: ${DOCKERHUB_USERNAME}/inventory-product-api:${IMAGE_TAG:-1.0.0}
     container_name: inventory-product-api
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
