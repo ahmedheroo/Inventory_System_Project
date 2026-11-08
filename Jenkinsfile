@@ -8,6 +8,11 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
+    // Start a build when GitHub sends a push webhook (GitHub plugin; webhook URL: <jenkins>/github-webhook/).
+    triggers {
+        githubPush()
+    }
+
     parameters {
         booleanParam(name: 'PUSH_IMAGES', defaultValue: false,
                      description: 'Push images to Docker Hub even when not building main.')
