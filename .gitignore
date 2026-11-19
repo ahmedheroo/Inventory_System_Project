@@ -449,3 +449,8 @@ FodyWeavers.xsd
 *.db-wal
 # Local tool/editor state
 .freebuff/
+
+# Ansible: never commit a vault password file or an unencrypted vault (see docs/deployment.md)
+.vault-pass
+*.vault-pass
+infra/ansible/*.retry
