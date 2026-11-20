@@ -19,7 +19,8 @@ Framework Core**, **SQL Server**, **RabbitMQ**, **SignalR** and **Docker**.
 9. [Verifying the system end to end](#9-verifying-the-system-end-to-end)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Repository layout](#11-repository-layout)
-12. [Glossary](#13-glossary)
+12. [CI/CD Pipeline with Jenkins](docs/ci-cd-jenkins-guide.md)
+13. [Glossary](#13-glossary)
 
 
 ---
@@ -507,9 +508,14 @@ dotnet test  InventorySystem.sln   # no broker, service or database needed
 
 ```
 InventorySystem.sln
+Jenkinsfile                 Declarative Jenkins CI/CD pipeline (build, test, docker, deploy)
 Dockerfile                  one recipe for all six apps (project chosen by build argument)
-docker-compose.yml          SQL Server + RabbitMQ + the six apps
+docker-compose.yml          SQL Server + RabbitMQ + the six apps (dev & build)
+docker-compose.prod.yml     production runtime pulling tagged images with health checks
 .env.example                template for passwords, environment and signing key
+deploy/
+  deploy.sh                 zero-downtime deployment script with health checks & rollback
+  docker-compose.jenkins.yml ready-to-run containerized Jenkins setup
 src/
   BuildingBlocks/
     InventorySystem.BuildingBlocks.Contracts   integration events, RabbitMQ topology, serialization

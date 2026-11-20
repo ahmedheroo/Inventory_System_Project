@@ -1,0 +1,214 @@
+services:
+  # Database: SQL Server 2022
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: inventory-sqlserver-prod
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD must be set in production}"
+      MSSQL_PID: "Standard"
+    ports:
+      - "${SQL_PORT:-1433}:1433"
+    volumes:
+      - sqlserver-prod-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: always
+
+  # Message Broker: RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: inventory-rabbitmq-prod
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:?RABBITMQ_USER must be set in production}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set in production}"
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-prod-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: always
+
+  # Product Service
+  product-api:
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-product-api:${IMAGE_TAG:-latest}
+    container_name: inventory-product-api-prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Database__Provider: SqlServer
+      ConnectionStrings__ProductDb: "Server=sqlserver,1433;Database=ProductDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+    ports:
+      - "${PRODUCT_API_PORT:-5251}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+
+  # Identity Service
+  identity-api:
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-identity-api:${IMAGE_TAG:-latest}
+    container_name: inventory-identity-api-prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Database__Provider: SqlServer
+      ConnectionStrings__IdentityDb: "Server=sqlserver,1433;Database=IdentityDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?JWT_SIGNING_KEY must be set in production}"
+    ports:
+      - "${IDENTITY_API_PORT:-5402}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+
+  # Inventory Service
+  inventory-api:
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-inventory-api:${IMAGE_TAG:-latest}
+    container_name: inventory-inventory-api-prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Database__Provider: SqlServer
+      ConnectionStrings__InventoryDb: "Server=sqlserver,1433;Database=InventoryDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY}"
+      Services__ProductApi__BaseUrl: "http://product-api:8080"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: "${RABBITMQ_USER}"
+      RabbitMq__Password: "${RABBITMQ_PASSWORD}"
+      RabbitMq__VirtualHost: "/"
+    ports:
+      - "${INVENTORY_API_PORT:-5102}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      product-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+
+  # Alert Service
+  alert-api:
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-alert-api:${IMAGE_TAG:-latest}
+    container_name: inventory-alert-api-prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Database__Provider: SqlServer
+      ConnectionStrings__AlertDb: "Server=sqlserver,1433;Database=AlertDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: "${RABBITMQ_USER}"
+      RabbitMq__Password: "${RABBITMQ_PASSWORD}"
+      RabbitMq__VirtualHost: "/"
+    ports:
+      - "${ALERT_API_PORT:-5212}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+
+  # Reporting Service
+  reporting-api:
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-reporting-api:${IMAGE_TAG:-latest}
+    container_name: inventory-reporting-api-prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Database__Provider: SqlServer
+      ConnectionStrings__ReportingDb: "Server=sqlserver,1433;Database=ReportingDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Services__ProductApi__BaseUrl: "http://product-api:8080"
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: "5672"
+      RabbitMq__UserName: "${RABBITMQ_USER}"
+      RabbitMq__Password: "${RABBITMQ_PASSWORD}"
+      RabbitMq__VirtualHost: "/"
+    ports:
+      - "${REPORTING_API_PORT:-5312}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      product-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+
+  # Web UI Console
+  console:
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-console:${IMAGE_TAG:-latest}
+    container_name: inventory-console-prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Services__ProductApi__BaseUrl: "http://product-api:8080"
+      Services__InventoryApi__BaseUrl: "http://inventory-api:8080"
+      Services__AlertApi__BaseUrl: "http://alert-api:8080"
+      Services__ReportingApi__BaseUrl: "http://reporting-api:8080"
+      Services__IdentityApi__BaseUrl: "http://identity-api:8080"
+    ports:
+      - "${CONSOLE_PORT:-5159}:8080"
+    depends_on:
+      identity-api:
+        condition: service_healthy
+      product-api:
+        condition: service_healthy
+      inventory-api:
+        condition: service_healthy
+      alert-api:
+        condition: service_healthy
+      reporting-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/sign-in -o /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    restart: always
+
+volumes:
+  sqlserver-prod-data:
+  rabbitmq-prod-data:

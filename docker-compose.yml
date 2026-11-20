@@ -49,7 +49,7 @@ services:
       context: .
       args:
         PROJECT: src/Services/Product/Product.Api/Product.Api.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-product-api:${IMAGE_TAG:-1.0.0}
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-product-api:${IMAGE_TAG:-1.0.0}
     container_name: inventory-product-api
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
@@ -69,7 +69,7 @@ services:
       context: .
       args:
         PROJECT: src/Services/Identity/Identity.Api/Identity.Api.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-identity-api:${IMAGE_TAG:-1.0.0}
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-identity-api:${IMAGE_TAG:-1.0.0}
     container_name: inventory-identity-api
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
@@ -91,7 +91,7 @@ services:
       context: .
       args:
         PROJECT: src/Services/Inventory/Inventory.Api/Inventory.Api.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-inventory-api:${IMAGE_TAG:-1.0.0}
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-inventory-api:${IMAGE_TAG:-1.0.0}
     container_name: inventory-inventory-api
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
@@ -121,7 +121,7 @@ services:
       context: .
       args:
         PROJECT: src/Services/Alert/Alert.Api/Alert.Api.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-alert-api:${IMAGE_TAG:-1.0.0}
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-alert-api:${IMAGE_TAG:-1.0.0}
     container_name: inventory-alert-api
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
@@ -148,7 +148,7 @@ services:
       context: .
       args:
         PROJECT: src/Services/Reporting/Reporting.Api/Reporting.Api.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-reporting-api:${IMAGE_TAG:-1.0.0}
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-reporting-api:${IMAGE_TAG:-1.0.0}
     container_name: inventory-reporting-api
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
@@ -180,7 +180,7 @@ services:
       context: .
       args:
         PROJECT: src/Inventory.Web/Inventory.Web.csproj
-    image: ${DOCKERHUB_USERNAME}/inventory-console:${IMAGE_TAG:-1.0.0}
+    image: ${DOCKERHUB_USERNAME:-inventory}/inventory-console:${IMAGE_TAG:-1.0.0}
     container_name: inventory-console
     environment:
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Development}"
