@@ -57,10 +57,17 @@ pipeline {
         // ----------------------------------------------------------
         stage('Build Docker Images') {
             steps {
-                sh """
-                    export IMAGE_TAG=${IMAGE_TAG}
-                    docker compose -f docker-compose.yml build
-                """
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKERHUB_USERNAME',
+                    passwordVariable: 'DOCKERHUB_PASSWORD'
+                )]) {
+                    sh """
+                        export DOCKERHUB_USERNAME=\${DOCKERHUB_USERNAME}
+                        export IMAGE_TAG=${IMAGE_TAG}
+                        docker compose -f docker-compose.yml build
+                    """
+                }
             }
         }
 
