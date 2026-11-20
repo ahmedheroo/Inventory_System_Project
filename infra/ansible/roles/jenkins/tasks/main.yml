@@ -1,0 +1,74 @@
+- name: Install Java 21 (required by current Jenkins LTS)
+  ansible.builtin.apt:
+    name: [fontconfig, openjdk-21-jre-headless]
+    state: present
+
+- name: Add Jenkins apt key
+  ansible.builtin.get_url:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    dest: /etc/apt/keyrings/jenkins-keyring.asc
+    mode: "0644"
+
+- name: Add Jenkins apt repository
+  ansible.builtin.apt_repository:
+    repo: deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/
+    filename: jenkins
+    state: present
+
+- name: Install Jenkins LTS and Ansible (the pipeline runs the deploy playbook)
+  ansible.builtin.apt:
+    name: [jenkins, ansible]
+    state: present
+    update_cache: true
+
+# Fixes "permission denied ... /var/run/docker.sock": the jenkins user must be in the docker group,
+# and Jenkins must be restarted to pick the group up.
+- name: Add jenkins to the docker group
+  ansible.builtin.user:
+    name: jenkins
+    groups: docker
+    append: true
+  notify: Restart Jenkins
+
+- name: Create Jenkins systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/jenkins.service.d
+    state: directory
+    mode: "0755"
+
+- name: Cap the Jenkins heap (shares a 4 GB server with the dev stack)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/jenkins.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Service]
+      Environment="JAVA_OPTS=-Djava.awt.headless=true -Xmx{{ jenkins_heap }}"
+  notify: Restart Jenkins
+
+- name: Enable and start Jenkins
+  ansible.builtin.systemd:
+    name: jenkins
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Restart Jenkins now if its group or settings changed
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for Jenkins to write its initial admin password
+  ansible.builtin.wait_for:
+    path: /var/lib/jenkins/secrets/initialAdminPassword
+    timeout: 120
+  failed_when: false
+
+- name: Read the initial admin password
+  ansible.builtin.slurp:
+    src: /var/lib/jenkins/secrets/initialAdminPassword
+  register: jenkins_initial_password
+  failed_when: false
+
+- name: Show how to finish the Jenkins setup
+  ansible.builtin.debug:
+    msg:
+      - "Jenkins: http://{{ ansible_host }}:8080"
+      - "Initial admin password: {{ (jenkins_initial_password.content | default('') | b64decode | trim) or 'not found (setup already finished)' }}"

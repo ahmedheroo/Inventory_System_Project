@@ -1,0 +1,8 @@
+# Deploys one release of the stack to one environment:
+#   ansible-playbook deploy.yml -l dev  -e image_tag=42-abc1234 --ask-vault-pass
+#   ansible-playbook deploy.yml -l prod -e image_tag=42-abc1234 --ask-vault-pass
+- name: Deploy InventorySystem
+  hosts: all
+  become: false
+  roles:
+    - deploy

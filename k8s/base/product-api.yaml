@@ -1,0 +1,78 @@
+# Product: products, categories and warehouses. Owns ProductDb; Inventory, Reporting and the console call it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-api
+spec:
+  selector:
+    app: product-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-api
+spec:
+  replicas: 1
+  # No surge: on a 4 GB node there is no room for two copies of a service during a rollout.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: product-api
+  template:
+    metadata:
+      labels:
+        app: product-api
+    spec:
+      initContainers:
+        - name: wait-for-sqlserver
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z -w 2 sqlserver 1433; do echo waiting for sqlserver:1433; sleep 3; done"]
+      containers:
+        - name: product-api
+          image: inventory-product-api
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: inventory-config
+          env:
+            - name: MSSQL_SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secrets
+                  key: MSSQL_SA_PASSWORD
+            - name: ConnectionStrings__ProductDb
+              value: "Server=sqlserver,1433;Database=ProductDb;User Id=sa;Password=$(MSSQL_SA_PASSWORD);TrustServerCertificate=True;MultipleActiveResultSets=True"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # Liveness only checks the process answers: /health also fails while the database is down,
+          # and restarting the service would not fix that.
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3

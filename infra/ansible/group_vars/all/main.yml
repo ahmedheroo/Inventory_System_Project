@@ -1,0 +1,29 @@
+# Shared by both environments.
+
+# Docker Hub account the Jenkins pipeline pushes to (same as DOCKERHUB_USERNAME in docker-compose.yml).
+dockerhub_username: CHANGE_ME
+
+# k3s: empty version = latest from the channel. Pin one (e.g. "v1.31.4+k3s1") once it works for you,
+# so a rebuilt server gets the same Kubernetes.
+k3s_channel: stable
+k3s_version: ""
+
+swap_size_mb: 4096
+timezone: UTC
+
+# Where the deploy role puts the manifests on the server.
+deploy_dir: "{{ ansible_env.HOME }}/inventory-deploy"
+kubeconfig_path: "{{ ansible_env.HOME }}/.kube/config"
+k8s_namespace: inventory
+
+# The six images built from ./Dockerfile, keyed by the image name the base manifests use.
+inventory_images:
+  - inventory-product-api
+  - inventory-identity-api
+  - inventory-inventory-api
+  - inventory-alert-api
+  - inventory-reporting-api
+  - inventory-console
+
+inventory_statefulsets: [sqlserver, rabbitmq]
+inventory_deployments: [product-api, identity-api, inventory-api, alert-api, reporting-api, console]

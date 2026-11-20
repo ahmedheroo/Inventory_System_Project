@@ -1,0 +1,76 @@
+# Console: the web UI. Owns no data; every screen is built from the five APIs. Its health is the sign-in page.
+apiVersion: v1
+kind: Service
+metadata:
+  name: console
+spec:
+  selector:
+    app: console
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console
+spec:
+  replicas: 1
+  # No surge: on a 4 GB node there is no room for two copies of a service during a rollout.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: console
+  template:
+    metadata:
+      labels:
+        app: console
+    spec:
+      initContainers:
+        - name: wait-for-identity-api
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z -w 2 identity-api 8080; do echo waiting for identity-api:8080; sleep 3; done"]
+      containers:
+        - name: console
+          image: inventory-console
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: inventory-config
+          env:
+            - name: Services__IdentityApi__ClientSecret
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secrets
+                  key: SEED_SERVICE_SECRET
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /sign-in
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /sign-in
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # Liveness only checks the process answers: /health also fails while the database is down,
+          # and restarting the service would not fix that.
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3

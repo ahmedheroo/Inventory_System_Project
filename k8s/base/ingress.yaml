@@ -1,0 +1,18 @@
+# Only the console is published, through the Traefik ingress controller k3s ships with (port 80 on the
+# node). The five APIs stay ClusterIP: the console calls them inside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: console
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: console
+                port:
+                  number: 8080

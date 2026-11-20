@@ -1,0 +1,85 @@
+# Deploys one release (image_tag) of the k8s/ manifests to the k3s cluster on this host.
+- name: Require an image tag
+  ansible.builtin.assert:
+    that:
+      - image_tag is defined
+      - image_tag | length > 0
+    fail_msg: "Pass the tag Jenkins pushed, e.g. -e image_tag=42-abc1234"
+
+- name: Remove the previous copy of the manifests
+  ansible.builtin.file:
+    path: "{{ deploy_dir }}/k8s"
+    state: absent
+
+- name: Create deploy directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ deploy_dir }}/k8s"
+    - "{{ deploy_dir }}/release"
+
+- name: Copy the manifests
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../k8s/"
+    dest: "{{ deploy_dir }}/k8s/"
+    mode: "0600"
+    directory_mode: "0700"
+
+- name: Write the release kustomization (environment overlay + pinned image tag)
+  ansible.builtin.template:
+    src: release-kustomization.yaml.j2
+    dest: "{{ deploy_dir }}/release/kustomization.yaml"
+    mode: "0600"
+
+- name: Create the namespace
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig {{ kubeconfig_path }} apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'namespace.yaml.j2') }}"
+  register: namespace_apply
+  changed_when: "'unchanged' not in namespace_apply.stdout"
+
+# Applied from stdin so the secret values never land in a file on the server.
+- name: Create or update the inventory-secrets Secret
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig {{ kubeconfig_path }} apply -f -
+    stdin: "{{ lookup('ansible.builtin.template', 'secret.yaml.j2') }}"
+  register: secret_apply
+  changed_when: "'unchanged' not in secret_apply.stdout"
+  no_log: true
+
+- name: Apply the release
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig {{ kubeconfig_path }} apply -k {{ deploy_dir }}/release
+  register: release_apply
+  changed_when: release_apply.stdout_lines | reject('search', ' unchanged$') | list | length > 0
+
+- name: Show what changed
+  ansible.builtin.debug:
+    var: release_apply.stdout_lines
+
+- name: Wait for SQL Server and RabbitMQ
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig {{ kubeconfig_path }} -n {{ k8s_namespace }} rollout status statefulset/{{ item }} --timeout=600s
+  loop: "{{ inventory_statefulsets }}"
+  changed_when: false
+
+- name: Wait for the six apps
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig {{ kubeconfig_path }} -n {{ k8s_namespace }} rollout status deployment/{{ item }} --timeout=600s
+  loop: "{{ inventory_deployments }}"
+  changed_when: false
+
+- name: Smoke test - the console's sign-in page answers through the ingress
+  ansible.builtin.uri:
+    url: http://127.0.0.1/sign-in
+    status_code: 200
+  register: smoke
+  retries: 12
+  delay: 10
+  until: smoke.status == 200
+
+- name: Deployed
+  ansible.builtin.debug:
+    msg: "{{ env_name }} is running {{ image_tag }}: http://{{ ansible_host }}/"
