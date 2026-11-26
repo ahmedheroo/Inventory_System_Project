@@ -17,3 +17,5 @@ vault_jwt_signing_key: CHANGE_ME_at_least_32_characters_long
 vault_seed_user_password: CHANGE_ME_12_chars
 # Secret of the console's own relay account, 12+ characters; also given to the console as its client secret.
 vault_seed_service_secret: CHANGE_ME_12_chars
+# Admin password for Grafana at /grafana (optional; defaults to vault_seed_user_password if omitted).
+vault_grafana_admin_password: CHANGE_ME_12_chars

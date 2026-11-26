@@ -22,4 +22,12 @@ resources:
   - alert-api.yaml
   - reporting-api.yaml
   - console.yaml
+  - monitoring.yaml
   - ingress.yaml
+
+configMapGenerator:
+  - name: grafana-dashboards
+    files:
+      - dashboards/inventory-overview.json
+    options:
+      disableNameSuffixHash: true

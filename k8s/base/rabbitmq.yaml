@@ -14,6 +14,9 @@ spec:
     - name: management
       port: 15672
       targetPort: 15672
+    - name: metrics
+      port: 15692
+      targetPort: 15692
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -37,6 +40,7 @@ spec:
           ports:
             - containerPort: 5672
             - containerPort: 15672
+            - containerPort: 15692
           env:
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
@@ -75,7 +79,8 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: local-path
+        # Omit storageClassName so the cluster's default StorageClass is used automatically
+        # (`local-path` on k3s, `hostpath` on Docker Desktop, `gp2`/`gp3` on EKS).
         resources:
           requests:
             storage: 2Gi

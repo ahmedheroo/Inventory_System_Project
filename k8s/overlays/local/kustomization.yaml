@@ -1,0 +1,46 @@
+# Local Kubernetes overlay (Docker Desktop / minikube / kind with ingress-nginx).
+# Build images locally first (`docker compose build`), then deploy everything with:
+#   kubectl apply -k k8s/overlays/local
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: inventory
+resources:
+  - ../../base
+  - secret.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/environment: local
+images:
+  - name: inventory-product-api
+    newName: local/inventory-product-api
+    newTag: "1.0.0"
+  - name: inventory-identity-api
+    newName: local/inventory-identity-api
+    newTag: "1.0.0"
+  - name: inventory-inventory-api
+    newName: local/inventory-inventory-api
+    newTag: "1.0.0"
+  - name: inventory-alert-api
+    newName: local/inventory-alert-api
+    newTag: "1.0.0"
+  - name: inventory-reporting-api
+    newName: local/inventory-reporting-api
+    newTag: "1.0.0"
+  - name: inventory-console
+    newName: local/inventory-console
+    newTag: "1.0.0"
+patches:
+  - target:
+      kind: ConfigMap
+      name: inventory-config
+    patch: |-
+      - op: replace
+        path: /data/ASPNETCORE_ENVIRONMENT
+        value: Development
+  - target:
+      kind: Ingress
+      name: console
+    patch: |-
+      - op: replace
+        path: /spec/ingressClassName
+        value: nginx

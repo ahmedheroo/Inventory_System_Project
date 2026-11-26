@@ -26,4 +26,4 @@ inventory_images:
   - inventory-console
 
 inventory_statefulsets: [sqlserver, rabbitmq]
-inventory_deployments: [product-api, identity-api, inventory-api, alert-api, reporting-api, console]
+inventory_deployments: [product-api, identity-api, inventory-api, alert-api, reporting-api, console, blackbox-exporter, prometheus, grafana]
