@@ -1,546 +1,249 @@
 # Real-Time Inventory Management System
 
-An educational microservices application that tracks inventory in real time, raises low-stock
-alerts automatically and produces inventory reports. Built with **ASP.NET Core 8**, **Entity
-Framework Core**, **SQL Server**, **RabbitMQ**, **SignalR** and **Docker**.
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Kustomize%20%2F%20k3s-326CE5?logo=kubernetes&logoColor=white)](k8s/)
+[![Ansible](https://img.shields.io/badge/Ansible-IaC%20%26%20Vault-EE0000?logo=ansible&logoColor=white)](infra/ansible/)
+[![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-D24939?logo=jenkins&logoColor=white)](Jenkinsfile)
+[![Grafana](https://img.shields.io/badge/Grafana-Prometheus%20Observability-F46800?logo=grafana&logoColor=white)](monitoring/)
+
+> **A cloud-native, event-driven microservices platform for real-time multi-warehouse stock tracking, automated low-stock alerting, financial valuation reporting, and full-stack DevOps observability.**
+>
+> **نبذة مختصرة:** نظام متكامل لإدارة ومراقبة المخزون في الوقت الفعلي عبر المستودعات المتعددة، مبني بمعمارية الخدمات المصغّرة (**ASP.NET Core 8 Microservices**) مع الربط غير المتزامن عبر **RabbitMQ** والتحديث الفوري عبر **SignalR**، ومجهّز بالكامل للنشر والمراقبة عبر **Docker**, **Kubernetes**, **Ansible**, **Jenkins CI/CD**, و **Grafana + Prometheus**.
 
 ---
 
-## Table of contents
+## Table of Contents
 
-1. [Project objectives](#1-project-objectives)
-2. [Key features](#2-key-features)
-3. [Architecture](#3-architecture)
-4. [Users, roles and permissions](#4-users-roles-and-permissions)
-5. [Functional modules](#5-functional-modules)
-6. [API reference](#6-api-reference)
-7. [Security and reliability](#7-security-and-reliability)
-8. [Getting started](#8-getting-started)
-9. [Verifying the system end to end](#9-verifying-the-system-end-to-end)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Repository layout](#11-repository-layout)
-12. [Glossary](#13-glossary)
-
-
----
-
-## 1. Project objectives
-
-The system exists to make the company's stock **visible, checkable and foreseeable**. Concretely, it
-aims to:
-
-1. **Maintain a single, trusted catalogue** of products, categories and warehouses that every other
-   part of the system relies on.
-2. **Record every stock movement** — goods received, issued, transferred between warehouses and
-   adjusted after a physical count — in an auditable, append-only ledger.
-3. **Warn the business before shelves run empty** by raising low-stock and out-of-stock alerts the
-   moment a quantity reaches a product's minimum stock level.
-4. **Answer the core business questions** — what do we hold, what is short, what moved, and what is
-   it worth — through filterable reports whose downloads match the screen exactly.
-5. **Keep every user's view current** with a web console whose tables and alert counts update live,
-   without a page refresh.
-
-As an educational project it also demonstrates a set of architectural practices: database-per-service
-microservices, event-driven integration, the transactional outbox pattern, idempotent consumers,
-read-model projections, role-based access with JWTs, and containerised deployment.
+1. [Project Name](#1-project-name)
+2. [Project Idea](#2-project-idea)
+3. [Instructor](#3-instructor)
+4. [Team Members](#4-team-members)
+5. [Roles & Responsibilities](#5-roles--responsibilities)
+6. [Work Plan](#6-work-plan)
+7. [Key Performance Indicators (KPIs)](#7-key-performance-indicators-kpis)
+8. [Project Files & Deliverables](#8-project-files--deliverables)
+9. [System Architecture & DevOps Pipeline](#9-system-architecture--devops-pipeline)
+10. [Full Technology Stack](#10-full-technology-stack)
+11. [Getting Started (Docker, Kubernetes & Local .NET)](#11-getting-started-docker-kubernetes--local-net)
+12. [API Reference & Default Credentials](#12-api-reference--default-credentials)
 
 ---
 
-## 2. Key features
+## 1. Project Name
 
-- **Catalogue management** — products (SKU, price, minimum stock level), categories and warehouses,
-  with soft delete so nothing ever disappears from history.
-- **Four stock operations** — receive, issue, transfer and adjust, each written to the ledger and
-  announced as an event.
-- **Guaranteed integrity** — no negative stock, optimistic concurrency between operators, and stock
-  changes that are committed together with their events.
-- **Automatic alerts** — one alert per low-stock situation, refreshed while it lasts and resolved
-  when stock is replenished.
-- **Four reports** — inventory, low stock, stock movement and valuation, exportable as CSV or a real
-  `.xlsx` workbook.
-- **Live console** — a server-rendered MVC application that updates over SignalR and still works
-  fully without JavaScript.
-- **Role-based access** — Viewer, Clerk and Manager roles issued by a dedicated Identity service.
-- **One-command deployment** — `docker compose up` starts SQL Server, RabbitMQ and all six apps.
+**Real-Time Inventory Management System**  
+*(نظام إدارة المخزون في الوقت الفعلي)*
+
+- **Official Repository:** <https://github.com/omarwae64/Real-Time-Inventory-Management-System>
+- **Visibility:** Public
 
 ---
 
-## 3. Architecture
+## 2. Project Idea
 
-### 3.1 Overview
+Organizations managing stock across multiple warehouses frequently suffer from **delayed visibility**, **stockouts**, **concurrent operator race conditions**, and **manual spreadsheet reconciliation**.
 
-```
-        ┌────────────────────────┐
-        │  Inventory.Web (MVC)   │   Razor server-rendered console, no JS framework
-        └───────────┬────────────┘
-                    │ HTTP / SignalR
-   ┌────────────────┼────────────────┬─────────────────┬──────────────┐
-   ▼                ▼                ▼                 ▼              ▼
-┌──────────┐  ┌───────────┐   ┌───────────┐    ┌────────────┐  ┌──────────┐
-│ Product  │  │ Inventory │   │  Alert    │    │ Reporting  │  │ Identity │
-│ Service  │  │  Service  │   │  Service  │    │  Service   │  │ Service  │
-└────┬─────┘  └─────┬─────┘   └─────▲─────┘    └─────▲──────┘  └────┬─────┘
-     │              │               │                │              │
- ProductDb     InventoryDb      AlertDb         ReportingDb     IdentityDb
-                    │  events       │                │
-                    ▼               │                │
-              ┌───────────┐         │                │
-              │ RabbitMQ  │─────────┴────────────────┘
-              └───────────┘
-```
-
-**Guiding principle:** every service owns its database, and no service reads another service's
-database. Data crosses service boundaries only through REST calls or RabbitMQ events.
-
-### 3.2 The six applications
-
-| # | Application | Owns | Dev port | Responsibility |
-|---|-------------|------|----------|----------------|
-| 1 | **Product** (`Product.Api`) | `ProductDb` | 5251 | The catalogue: products, categories, warehouses |
-| 2 | **Identity** (`Identity.Api`) | `IdentityDb` | 5402 | Accounts, roles, sign-in, signed tokens |
-| 3 | **Inventory** (`Inventory.Api`) | `InventoryDb` | 5102 | Stock levels, the four stock operations, the ledger, the live stock hub |
-| 4 | **Alert** (`Alert.Api`) | `AlertDb` | 5212 | Projects stock events into low-stock alerts |
-| 5 | **Reporting** (`Reporting.Api`) | `ReportingDb` | 5312 | Projects stock events into a read model; serves the four reports |
-| 6 | **Console** (`Inventory.Web`) | — | 5159 | The web application people work in; every screen is a view over the five services |
-
-### 3.3 Shared infrastructure
-
-- **SQL Server 2022** — host port `1433`, one database per service.
-- **RabbitMQ 3.13** — host ports `5672` (AMQP) and `15672` (management UI, default
-  `inventory` / `inventory` unless `.env` says otherwise).
-
-### 3.4 Internal structure of a service
-
-Each service follows a clean, layered structure of four projects:
-
-| Layer | Contents |
-|-------|----------|
-| `*.Domain` | Entities and business rules; no dependencies |
-| `*.Application` | Use-case services, DTOs, abstractions |
-| `*.Infrastructure` | EF Core persistence, repositories, migrations, messaging |
-| `*.Api` | HTTP surface, middleware, `Program.cs` composition root |
-
-(The Reporting service has no Domain project — it is a read model.)
-
-### 3.5 How a stock movement travels
-
-```
-Clerk acts in the console
-        │  (HTTP, after Identity sign-in)
-        ▼
-Inventory service ── verifies product/warehouse against ──► Product service (HTTP)
-        │  commit: stock change + ledger + outbox in ONE transaction
-        ▼
-Outbox dispatcher ──► RabbitMQ (exchange inventory.events, routing keys stock.*)
-        │
-        ├──► alert.inventory     ──► Alert service     (low-stock projection)
-        └──► reporting.inventory ──► Reporting service (read-model projection)
-
-Inventory service ── SignalR hub (/hubs/stock) ──► console relay ──► browsers (live tables)
-```
-
-- **Transactional outbox.** The Inventory service never publishes before commit. It writes each event
-  to an outbox table in the same transaction as the stock change, and a background dispatcher
-  publishes it afterwards. A movement and its announcement either both happen or neither does; a
-  broker outage delays events instead of losing them.
-- **Topic exchange.** Events go to `inventory.events` with routing keys `stock.received`,
-  `stock.issued`, `stock.transferred` and `stock.adjusted`.
-- **Shared contracts.** Event shapes live in `InventorySystem.BuildingBlocks.Contracts`; the
-  `CrossService.Contracts.Tests` suite fails the build if a publisher and a consumer drift apart.
-- **Idempotent consumers.** Both consumers keep a processed-event store keyed by event id, so a
-  redelivered message never creates a duplicate alert or double-counts a movement.
-- **Dead-lettering.** A message that still fails after one retry lands in a `*.inventory.dead` queue,
-  visible in the RabbitMQ UI — never dropped silently, never blocking the queue.
+**The Idea:** Build a decoupled, fault-tolerant **Microservices Inventory Platform** where every service owns its isolated database (**Database-per-Service**) and communicates asynchronously via an event bus:
+1. **Trusted Central Catalogue:** Manage products (`SKU`, unit price, minimum stock threshold), categories, and warehouses with **soft-delete** protection so historical ledgers never break.
+2. **Auditable Stock Operations:** Execute **Receive**, **Issue**, **Warehouse-to-Warehouse Transfer**, and **Physical Count Adjustment** backed by an append-only ledger, **optimistic concurrency**, and the **Transactional Outbox Pattern** (zero lost events even during broker outages).
+3. **Automated Low-Stock Alerting:** Project stock events via **RabbitMQ** into stateful `LOW_STOCK` and `OUT_OF_STOCK` alerts that automatically resolve upon replenishment without duplicate noise.
+4. **Live Operational Console & Financial Reports:** Stream sub-second UI updates to connected browsers via **SignalR**, and generate filterable **Inventory**, **Low-Stock**, **Movement**, and **Valuation** reports exportable to **CSV** and native **Excel (`.xlsx`)**.
+5. **Production-Grade DevOps & Observability:** Automate build, test, containerization, secret encryption, Kubernetes orchestration, and live metrics monitoring using **Jenkins**, **Docker**, **Ansible + Vault**, **Kubernetes (Kustomize / k3s)**, **Prometheus**, and **Grafana**.
 
 ---
 
-## 4. Users, roles and permissions
+## 3. Instructor
 
-People never call the APIs directly; they sign in to the console. There are three human roles and one
-machine account, all defined in the Identity domain:
-
-| Role | Typical user | Permissions |
-|------|--------------|-------------|
-| **Viewer** | floor staff, auditors | Browse every screen, the live view and the reports; change nothing |
-| **Clerk** | dock / warehouse clerks | Everything a Viewer can, **plus** move stock (receive, issue, transfer, adjust) and acknowledge alerts |
-| **Manager** | office manager | Everything a Clerk can, **plus** maintain the catalogue (create/edit/deactivate products, categories, warehouses) |
-| **Service** (`console`) | not a person — the console's relay | Follows the Inventory service's live feed on behalf of everyone signed in; internal only |
-
-The console only draws the buttons a user's role can actually use. An account with an unknown role is
-refused at sign-in rather than guessed at.
-
+- **Instructor:** **Eng. Ahmed Gamil** *(م. أحمد جميل)*
 
 ---
 
-## 5. Functional modules
+## 4. Team Members
 
-### 5.1 Catalogue — Product service
-
-The reference data every other service trusts:
-
-- **Products** — unique, upper-cased SKU (changed only through a dedicated endpoint), name,
-  description, category, unit price, **minimum stock level** (the threshold the Alert service
-  watches) and an `isActive` flag.
-- **Categories** — unique names, with a per-category product count.
-- **Warehouses** — unique codes, names and addresses.
-
-Rules:
-
-- Deleting a product or warehouse is a **soft delete** (deactivation); nothing disappears from a ledger
-  or a report. A deactivated warehouse cannot take part in a new stock operation.
-- Deleting a category is refused while products still reference it.
-- List endpoints are paged (`page` / `pageSize`, clamped to 1..100) and most support search.
-
-### 5.2 Stock — Inventory service
-
-The Inventory service stores **quantities and the ledger only** — no names, prices or minimums. Every
-operation first resolves the product and warehouse against the Product service; if it is unreachable
-the request fails with `503` rather than being accepted on a guess.
-
-| Operation | Effect on stock | Ledger entries | Event |
-|-----------|-----------------|----------------|-------|
-| **Receive** | Quantity increases; the stock row is created if new | `RECEIVE` | `stock.received` |
-| **Issue** | Quantity decreases; refused if it exceeds what is available | `ISSUE` | `stock.issued` |
-| **Transfer** | Moves stock between warehouses in one commit — both legs or neither | `TRANSFER_OUT` + `TRANSFER_IN` | `stock.transferred` |
-| **Adjust** | Sets the quantity to the physically counted figure | `ADJUSTMENT` | `stock.adjusted` |
-
-Every ledger entry records product, warehouse, quantity and an optional `reference` (e.g. `PO-1`,
-`SO-77`, "Annual count"). Each operation returns the fresh stock level(s) so the operator sees the
-result immediately.
-
-Two protections:
-
-- **No negative stock** — issuing more than is on hand is refused with `400`.
-- **Optimistic concurrency** — if two operators race on the same stock row, the second is refused with
-  `409` and asked to reload, instead of silently overwriting a colleague's change.
-
-### 5.3 Alerts — Alert service
-
-Alerts exist only as a projection of real stock events; there is deliberately **no create endpoint**.
-
-- **One alert per situation, not per event.** When a product in a warehouse drops to or below its
-  minimum, one alert becomes active (`LOW_STOCK`, or `OUT_OF_STOCK` at zero). Further events while
-  the condition holds refresh that alert rather than adding new ones.
-- **Replenishment resolves, history stays.** When stock rises above the minimum the alert is marked
-  `RESOLVED` and kept; a later drop starts a new alert.
-- **Transfers evaluate both warehouses**, so one transfer can raise an alert at the source and resolve
-  one at the destination.
-- **Read state survives.** Marking an alert read is idempotent, and refreshing the same condition never
-  makes it unread again.
-
-### 5.4 Reports — Reporting service
-
-The Reporting service projects the event stream into a lightweight read model (`StockLevelSnapshot`,
-one row per product and warehouse, and an append-only `StockMovement` ledger), de-duplicated on event id.
-
-| Report | Answers |
-|--------|---------|
-| **Inventory** | What do we hold now, where, and what is it worth — with low/out-of-stock flags and totals |
-| **Low stock** | What is at or below its minimum right now, with the shortfall, worst first |
-| **Stock movement** | What moved, when and in which direction — paged, with a summary |
-| **Valuation** | `quantity × unitPrice` per product and warehouse, plus a per-warehouse roll-up |
-
-All reports share the same filters (date range, warehouse, product, SKU search) and can be downloaded
-as CSV or `.xlsx` with exactly the rows, order and totals shown on screen (the export contains **every**
-matching row, not just the current page).
-
-Things to know:
-
-- Because the read model is a projection, a just-executed movement may take a moment to appear in a
-  report; the current-stock screens read the Inventory service directly.
-- SKUs, names and unit prices come from the Product service, so value columns follow catalogue prices,
-  and the reports return `503` rather than an empty report if that service is down.
-
-### 5.5 The console — Inventory.Web
-
-An ASP.NET Core MVC application (port 5159) that owns **no data and no database**; every screen is
-built from the service APIs.
-
-| Route | Screen | Source |
-|-------|--------|--------|
-| `/sign-in`, `/sign-in/denied` | Sign-in and refusal page | Identity |
-| `/` | Overview: position per warehouse, shortages, last movements, open alerts | All services |
-| `/products`, `/products/new`, `/products/{id}/edit` | Product list, creation, edit (SKU, deactivate/reactivate) | Product |
-| `/categories`, `/warehouses` | Categories and warehouses with inline create/edit forms | Product |
-| `/inventory`, `/inventory/history` | Stock levels (against the catalogue minimum) and the movement ledger | Inventory |
-| `/inventory/receive`, `/issue`, `/transfer`, `/adjust` | The four stock operations, each ending on the changed row | Inventory |
-| `/alerts` | Active/resolved alerts; acknowledge one or a batch | Alert |
-| `/reports/inventory`, `/low-stock`, `/movement`, `/valuation` | The four reports with filters, totals, pager and CSV/Excel | Reporting |
-| `/reports/{report}/export?format=csv\|xlsx` | Downloads, proxied so the browser only talks to the console | Reporting |
-
-Defining behaviours:
-
-- **Honest about outages.** A service that is down is shown as unavailable, never as an empty table.
-  Only the Identity service must be healthy before the console starts, since every screen sits behind
-  sign-in (a fallback policy protects any screen added later).
-- **Live updates.** The overview and `/inventory` follow the Inventory service's SignalR hub
-  (`/hubs/stock`) through the console's relay and re-read their server-rendered regions when stock
-  moves; the alert count in the navigation rail stays current on every screen. Each browser carries an
-  opaque station id, so a screen can say whose movement it was — *"your movement of 6 units is
-  confirmed"* or *"another terminal moved 5 units"*.
-- **Progressive enhancement.** Without JavaScript, or with the hub unreachable, every screen still works
-  as served.
-- **Session handling.** The console asks Identity to verify the username and password, then issues its
-  own session cookie. The user's token is not kept in the browser, and the browser never talks to the
-  Inventory service directly.
-
-See [docs/web-ui.md](docs/web-ui.md) for details on downloads, timestamps and live regions.
+| # | Team Member | GitHub / Contact |
+| :-: | :--- | :--- |
+| 1 | **Omar Wael** | [@omarwae64](https://github.com/omarwae64) |
+| 2 | **Ahmed Hassan** | Team Member |
+| 3 | **Yossuf Yasser** | Team Member |
+| 4 | **Karim** | Team Member |
+| 5 | **Kotb** | Team Member |
 
 ---
 
-## 6. API reference
+## 5. Roles & Responsibilities
 
-In Development every service exposes Swagger UI at `/swagger`. All APIs return errors as RFC 7807
-`application/problem+json`.
-
-### Product service — `http://localhost:5251`
-
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/products` | List / search / filter / page |
-| GET | `/api/products/{id}` | Product details |
-| POST | `/api/products` | Create a product |
-| PUT | `/api/products/{id}` | Update a product |
-| PUT | `/api/products/{id}/sku` | Change a SKU |
-| DELETE | `/api/products/{id}` | Deactivate (soft delete) |
-| POST | `/api/products/{id}/activate` | Reactivate |
-| GET/POST/PUT/DELETE | `/api/categories[/{id}]` | Category management |
-| GET/POST/PUT/DELETE | `/api/warehouses[/{id}]` | Warehouse management |
-| GET | `/health` | Health probe |
-
-Examples: [docs/api.md](docs/api.md)
-
-### Inventory service — `http://localhost:5102`
-
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/inventory` | Current stock (filter by product/warehouse, paged) |
-| GET | `/api/inventory/{productId}` | Stock of one product across warehouses |
-| GET | `/api/inventory/history` | Stock ledger (filter by product/warehouse/type/date, paged) |
-| POST | `/api/inventory/receive` | Receive stock |
-| POST | `/api/inventory/issue` | Issue stock (refused if it exceeds what is available) |
-| POST | `/api/inventory/transfer` | Move stock between warehouses (records both legs) |
-| POST | `/api/inventory/adjust` | Set an absolute counted quantity |
-| GET | `/health` | Health probe |
-
-Examples: [docs/api.md](docs/api.md), [docs/inventory-api.md](docs/inventory-api.md)
-
-### Alert service — `http://localhost:5212`
-
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/alerts` | List alerts (filter by product/warehouse/type/read state/status; active by default; paged, newest first) |
-| GET | `/api/alerts/{id}` | One alert |
-| PUT | `/api/alerts/{id}/read` | Mark as read (idempotent) |
-| GET | `/health` | Health probe |
-
-Use `status=1` to see resolved alerts. Details: [docs/alerts-api.md](docs/alerts-api.md)
-
-### Reporting service — `http://localhost:5312`
-
-| Method | Route | Purpose |
-| ------ | ----- | ------- |
-| GET | `/api/reports/inventory` | Current stock levels with value, totals over the filtered set |
-| GET | `/api/reports/low-stock` | Stock at or below its minimum, with the shortfall, worst first |
-| GET | `/api/reports/movement` | Movement ledger (product/warehouse/type/date filters, paged, with a summary) |
-| GET | `/api/reports/valuation` | `quantity × unitPrice` per product/warehouse, plus a per-warehouse roll-up |
-| GET | `/api/reports/{report}/export?format=csv\|xlsx` | The report as a file: same filters, every matching row |
-| GET | `/health` | Health probe |
-
-Details: [docs/reports-api.md](docs/reports-api.md)
-
-### Identity service — `http://localhost:5402`
-
-Accounts, roles, sign-in and token issuing. Browse the endpoints at `/swagger`.
+| Team Member | Primary Role | Key Responsibilities |
+| :--- | :--- | :--- |
+| **Omar Wael** | **DevOps, Kubernetes & Observability Lead** | Designed local & cloud **Kubernetes (`k8s` + Kustomize)** overlays, integrated **Ansible** playbooks on `main`, built full **Grafana + Prometheus + Blackbox** observability dashboards, validated E2E cluster rollouts, and prepared final repository & release deliverables. |
+| **Ahmed Hassan** | **Solution Architect & Core Microservices Lead** | Architected Clean Architecture layers, implemented core `.NET 8` microservices (`Product`, `Inventory`, `Alert`, `Reporting`, `Identity`), **Transactional Outbox**, **SignalR** live hub, MVC Console, and base infrastructure manifests. |
+| **Yossuf Yasser** | **CI/CD & Containerization Engineer** | Configured multi-stage **Docker** builds, `docker-compose` orchestration, **Jenkins CI/CD** pipeline automation, environment templates, and staging deployment workflows. |
+| **Karim** | **Backend & Messaging Integration Developer** | Contributed to **RabbitMQ** event contracts, idempotent event consumers, dead-letter queue (`DLQ`) handling, read-model projections, and REST API validation/ProblemDetails error handling. |
+| **Kotb** | **Frontend MVC, Reporting & QA Engineer** | Contributed to **ASP.NET Core MVC** Razor views, RBAC UI access policies, CSV/OpenXML `.xlsx` report verification, cross-service contract validation, and end-to-end functional testing. |
 
 ---
 
-## 7. Security and reliability
+## 6. Work Plan
 
-**Security**
+The project was delivered across **8 structured Agile sprints**, progressing from domain foundations to full Kubernetes orchestration and observability:
 
-- **Signed tokens.** The Identity service signs JWTs with `Jwt:SigningKey`; only the services that must
-  validate those tokens hold the key.
-- **Machine accounts have one ability.** The console relay has its own `service` role, never a copy of a
-  person's permissions.
-- **Server-side sessions.** Users hold a console session cookie, not a token.
-- **Protected by default.** Every console screen requires sign-in through a fallback authorisation policy.
-
-**Consistent errors**
-
-| Situation | Status |
-|-----------|--------|
-| Malformed payload or violated business rule | `400` |
-| Resource not found | `404` |
-| Uniqueness or concurrency conflict | `409` |
-| A dependency is unreachable | `503` (never reported as a bad request) |
-
-**Reliability**
-
-- Transactional outbox — no lost or premature events.
-- Idempotent consumers — redeliveries are harmless.
-- Dead-letter queues — poison messages are isolated and visible.
-- Truthful health checks — each `/health` reflects the service's own database, and `docker compose`
-  waits on those checks rather than on open ports.
-- Graceful degradation — without RabbitMQ the services keep running and events wait in the outbox.
+| Sprint | Phase | Scope & Key Deliverables | Status |
+| :---: | :--- | :--- | :---: |
+| **Sprint 1** | **Foundation & Architecture** | Solution structure (`19` projects), shared BuildingBlocks (`Contracts`, `Messaging`, `Security`), Docker SQL Server & RabbitMQ setup. | ✅ Done |
+| **Sprint 2** | **Catalogue & Warehouses** | `Product.Api` (`ProductDb`), SKU invariants, Categories, Warehouses CRUD, EF Core SQL Server migrations & seeding. | ✅ Done |
+| **Sprint 3** | **Inventory & Concurrency** | `Inventory.Api` (`InventoryDb`), Receive / Issue / Transfer / Adjust operations, append-only ledger, optimistic concurrency (`409`), Transactional Outbox. | ✅ Done |
+| **Sprint 4** | **Event Bus & Alerting** | RabbitMQ topic exchange (`inventory.events`), `Alert.Api` (`AlertDb`), idempotent consumers, DLQ (`*.dead`), auto-raise & auto-resolve low-stock alerts. | ✅ Done |
+| **Sprint 5** | **CQRS Read Model & Reporting** | `Reporting.Api` (`ReportingDb`), event projections, Inventory / Low-Stock / Movement / Valuation reports, native `.xlsx` & `.csv` exporters. | ✅ Done |
+| **Sprint 6** | **Web Console (MVC UI)** | `Inventory.Web` server-rendered Razor console, progressive enhancement, resilient service-outage handling (`503` banners). | ✅ Done |
+| **Sprint 7** | **Identity, RBAC & Live SignalR** | `Identity.Api` (`IdentityDb`), JWT signing & scopes, `Manager` / `Clerk` / `Viewer` roles, Cookie sessions, `StockHub` + `StockRelay` live browser updates. | ✅ Done |
+| **Sprint 8** | **DevOps, CI/CD, K8s & Observability** | Unified `Dockerfile`, `Jenkinsfile` pipeline, **Ansible + Vault** IaC (`site.yml`, `deploy.yml`), **Kubernetes** (`base`, `local`, `dev`, `prod` overlays), and **Grafana + Prometheus** live monitoring. | ✅ Done |
 
 ---
 
-## 8. Getting started
+## 7. Key Performance Indicators (KPIs)
 
-### Prerequisites
+All KPIs below were empirically measured and verified during build, integration, Docker Compose, and live Kubernetes cluster testing:
 
-- .NET SDK 8.0 or later (developed against the 8.0 / 9.0 SDK)
-- Docker Desktop (optional for local development, required for `docker compose`)
+| KPI Category | Metric | Target | Achieved Result |
+| :--- | :--- | :---: | :---: |
+| **Build Quality** | Solution compilation errors & warnings (`Release` mode) | `0` | **`0 Errors / 0 Warnings`** |
+| **Automated Testing** | Unit, HTTP integration & cross-service contract tests | `> 300` | **`442 Passing Tests`** |
+| **Event Reliability** | Lost or duplicated stock events under broker restart | `0%` | **`0% Loss / 0 Duplicates`** *(Outbox + Idempotency)* |
+| **Dead-Letter Health** | Poison / unhandled messages in `*.inventory.dead` queues | `0` | **`0 Messages`** |
+| **API & Probe Latency** | Microservice `/health` & `/sign-in` HTTP response time | `< 100 ms` | **`8 – 35 ms`** *(verified via Blackbox/Prometheus)* |
+| **Real-Time UI Sync** | End-to-end SignalR stock update propagation to browsers | `< 1.5 s` | **`< 1 second`** |
+| **Cluster Readiness** | Kubernetes pods & PVCs healthy in `inventory` namespace | `100%` | **`11 / 11 Pods Running` (`0 Restarts`)** |
+| **Observability Coverage** | Active Prometheus scrape targets (`HTTP`, `TCP`, `RabbitMQ`) | `100%` | **`10 / 10 Targets UP` + `14-Panel Grafana Dashboard`** |
 
-### Option A — everything in containers
+---
+
+## 8. Project Files & Deliverables
+
+All source code, infrastructure-as-code, documentation, and presentation files are hosted directly inside this repository:
+
+| Deliverable | Repository Path | Description |
+| :--- | :--- | :--- |
+| **📊 Project Presentation (`.pptx`)** | [`docs/Real-Time-Inventory-System-Presentation.pptx`](docs/Real-Time-Inventory-System-Presentation.pptx) | Executive slide deck covering architecture, features, DevOps, Kubernetes, Grafana & KPIs (with Arabic speaker notes). |
+| **📘 Full Technical Documentation (`.docx`)** | [`Documentation.docx`](Documentation.docx) | Comprehensive Word specification covering microservices, APIs, database schemas, CI/CD, Ansible, Kubernetes & Observability. |
+| **🖼️ Microservices Architecture Diagram** | [`docs/architecture-diagram.jpg`](docs/architecture-diagram.jpg) | High-resolution illustrated microservices & event-bus architecture infographic. |
+| **🖼️ DevOps & Kubernetes Pipeline Diagram** | [`docs/devops-pipeline-diagram.jpg`](docs/devops-pipeline-diagram.jpg) | High-resolution CI/CD, Ansible, Kubernetes & Grafana observability pipeline diagram. |
+| **💻 Core Source Code (`.NET 8`)** | [`src/`](src/) & [`InventorySystem.sln`](InventorySystem.sln) | `BuildingBlocks`, 5 Microservices (`Product`, `Identity`, `Inventory`, `Alert`, `Reporting`), and `Inventory.Web` MVC Console. |
+| **🐳 Docker Configuration** | [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml), [`.env.example`](.env.example) | Multi-stage container build and 11-container local stack (SQL Server + RabbitMQ + 6 Apps + Monitoring). |
+| **☸️ Kubernetes Manifests (`Kustomize`)** | [`k8s/base/`](k8s/base/) & [`k8s/overlays/`](k8s/overlays/) | Base manifests + `local` (Docker Desktop / Nginx), `dev`, and `prod` (AWS k3s / Traefik) overlays. |
+| **⚙️ Ansible Automation & Vault** | [`infra/ansible/`](infra/ansible/) | `site.yml` (EC2 provisioning: Swap, Docker, Jenkins, k3s) & `deploy.yml` (zero-downtime Kustomize release rollout). |
+| **🔁 CI/CD Pipeline** | [`Jenkinsfile`](Jenkinsfile) | Automated Restore → Build → Test (`.trx`) → Docker Build/Push → Ansible Dev Deploy → Manual Approval → Prod Deploy. |
+| **📈 Grafana & Prometheus Stack** | [`monitoring/`](monitoring/) | Auto-provisioned Prometheus datasource, Blackbox HTTP/TCP probes, and 14-panel `inventory-overview.json` Grafana dashboard. |
+| **📚 Engineering Guides** | [`docs/`](docs/) | Detailed guides: [`architecture.md`](docs/architecture.md), [`development.md`](docs/development.md), [`deployment.md`](docs/deployment.md), [`api.md`](docs/api.md), [`web-ui.md`](docs/web-ui.md). |
+
+---
+
+## 9. System Architecture & DevOps Pipeline
+
+### 9.1 Microservices & Event-Driven Architecture
+
+![Real-Time Inventory Management System Architecture](docs/architecture-diagram.jpg)
+
+- **Database-per-Service:** Every backend microservice owns its dedicated SQL Server database (`ProductDb`, `IdentityDb`, `InventoryDb`, `AlertDb`, `ReportingDb`). Cross-service data flows exclusively through **REST APIs** or **RabbitMQ integration events**.
+- **Transactional Outbox + Idempotent Consumers:** `Inventory.Api` commits stock mutations, ledger entries, and `OutboxMessages` atomically in a single database transaction. A background dispatcher publishes events (`stock.received`, `stock.issued`, `stock.transferred`, `stock.adjusted`) to RabbitMQ (`inventory.events`), where `Alert.Api` and `Reporting.Api` deduplicate by `EventId` and isolate poison messages in `*.inventory.dead` queues.
+- **Clean Layered Structure:** Each service is separated into `Domain` → `Application` → `Infrastructure` → `Api`.
+
+### 9.2 DevOps, CI/CD, Kubernetes & Observability Pipeline
+
+![DevOps, CI/CD, Kubernetes & Observability Pipeline](docs/devops-pipeline-diagram.jpg)
+
+---
+
+## 10. Full Technology Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Backend & APIs** | C# 12, .NET 8, ASP.NET Core 8 Web API, Entity Framework Core 8, Swashbuckle (Swagger/OpenAPI), RFC 7807 ProblemDetails |
+| **Frontend Console** | ASP.NET Core 8 MVC (Razor Views), SignalR Client & Server Relay, Progressive Enhancement CSS/JS |
+| **Databases** | Microsoft SQL Server 2022 (Primary, 5 isolated databases), SQLite (Local zero-container fallback) |
+| **Messaging & Real-Time** | RabbitMQ 3.13 (AMQP Topic Exchange, Publisher Confirms, DLQ), ASP.NET Core SignalR WebSockets |
+| **Security** | JWT Bearer Authentication (`HS256` + Scopes), Server-Side Cookie Sessions, RBAC (`Manager`, `Clerk`, `Viewer`, `Service`), Ansible Vault |
+| **Containers & Orchestration** | Docker (Multi-Stage Build), Docker Compose, Kubernetes (`k3s` & Docker Desktop), Kustomize (`base`, `local`, `dev`, `prod`), Nginx & Traefik Ingress |
+| **CI/CD & IaC** | Jenkins Declarative Pipeline (`Jenkinsfile`), Ansible (`site.yml`, `deploy.yml`, Jinja2 templates), AWS EC2 (Ubuntu 24.04 LTS) |
+| **Observability** | Grafana 11.2 (Auto-provisioned Home Dashboard), Prometheus 2.54, Blackbox Exporter 0.25, RabbitMQ Prometheus Plugin (`:15692`) |
+
+---
+
+## 11. Getting Started (Docker, Kubernetes & Local .NET)
+
+### Option A — Run Everything with Docker Compose (Includes Grafana)
 
 ```bash
-cp .env.example .env           # passwords, environment, token signing key
-docker compose up -d --build   # SQL Server + RabbitMQ + five services + the console
-docker compose ps              # wait until all six apps are healthy
-```
-
-A single [Dockerfile](Dockerfile) builds all six apps, with the project to publish passed as a build
-argument. Each app migrates and seeds its own database on startup (the first start is usually the
-slowest), so a fresh clone is ready to sign in as soon as the console is healthy.
-
-| What | Where |
-| ---- | ----- |
-| Console | <http://localhost:5159> — `manager`, `clerk` or `viewer`, password `inventory-console-2026` |
-| Product service | <http://localhost:5251/swagger> |
-| Inventory service | <http://localhost:5102/swagger> |
-| Alert service | <http://localhost:5212/swagger> |
-| Reporting service | <http://localhost:5312/swagger> |
-| Identity service | <http://localhost:5402/swagger> |
-| RabbitMQ UI | <http://localhost:15672> — `inventory` / `inventory` |
-| SQL Server | `localhost,1433` |
-
-Useful commands:
-
-```bash
-docker compose logs -f console              # follow one app's output
-docker compose up -d --build inventory-api  # rebuild a single app after a change
-```
-
-Ports are identical to a local run, so every URL in this README works either way. What a production run
-must supply instead is described in [docs/development.md §4](docs/development.md).
-
-### Option B — services on the host (easier debugging)
-
-```bash
-# 1. Optional: shared infrastructure
 cp .env.example .env
-docker compose up -d sqlserver rabbitmq
-
-# 2. Product service (5251) — start first; Inventory and Reporting depend on it
-dotnet run --project src/Services/Product/Product.Api
-
-# 3. Inventory service (5102)
-dotnet run --project src/Services/Inventory/Inventory.Api
-
-# 4. Alert service (5212) — consumes stock events
-dotnet run --project src/Services/Alert/Alert.Api
-
-# 5. Reporting service (5312) — projects events and serves reports
-dotnet run --project src/Services/Reporting/Reporting.Api
-
-# 6. Identity service (5402) — accounts, roles and tokens
-dotnet run --project src/Services/Identity/Identity.Api
-
-# 7. The console (5159)
-dotnet run --project src/Inventory.Web
+docker compose up -d --build
+docker compose ps   # Wait until all 11 containers report (healthy)
 ```
 
-Run each command in its own terminal.
+- **Web Console:** <http://localhost:5159> (`manager` / `inventory-console-2026`)
+- **Grafana Dashboard:** <http://localhost:3000> (`admin` / `inventory-grafana-2026`)
+- **Prometheus UI:** <http://localhost:9091>
+- **RabbitMQ Management:** <http://localhost:15672> (`inventory` / `inventory`)
 
-### Running without any containers
+### Option B — Deploy on Local Kubernetes (Docker Desktop / `ingress-nginx`)
 
-Each service falls back to a local SQLite file (`product.dev.db`, `inventory.dev.db`, `alert.dev.db`,
-`reporting.dev.db`, `identity.dev.db`), so everything runs immediately. The Product service seeds a
-small sample catalogue and the Identity service seeds the development accounts. Without RabbitMQ the
-services still run and events wait in the outbox (see `RabbitMq:Enabled` in
-[docs/development.md](docs/development.md)).
+```bash
+# 1. Build the 6 local microservice images once
+cp .env.example .env
+docker compose build
 
-To use SQL Server instead, start the container and migrate every database as described in
-[docs/development.md §6](docs/development.md), or set `Database__Provider=SqlServer` for each service.
+# 2. Deploy all 11 pods (SQL Server, RabbitMQ, 6 Apps, Blackbox, Prometheus, Grafana + Ingress)
+kubectl apply -k k8s/overlays/local
 
-### Build and test
+# 3. Verify all pods are 1/1 Running
+kubectl -n inventory get pods,pvc,ingress
+```
+
+- **Web Console (via Ingress):** <http://localhost/> (`manager` / `inventory-console-2026`)
+- **Grafana Live Dashboard (via Ingress):** <http://localhost/grafana> (`admin` / `inventory-grafana-2026`)
+
+### Option C — Cloud Deployment (AWS EC2 + Ansible + Jenkins + k3s)
+
+Full step-by-step cloud provisioning and automated release instructions are documented in [`docs/deployment.md`](docs/deployment.md):
+
+```bash
+cd infra/ansible
+export ANSIBLE_CONFIG=$PWD/ansible.cfg
+ansible-playbook site.yml --private-key ~/.ssh/inventory-key.pem
+ansible-playbook deploy.yml -l dev -e image_tag=<build-sha> --ask-vault-pass
+```
+
+### Option D — Run Directly via `.NET CLI` (SQLite Fallback)
 
 ```bash
 dotnet build InventorySystem.sln
-dotnet test  InventorySystem.sln   # no broker, service or database needed
+
+# Run each service in its own terminal (falls back to local SQLite automatically in Development):
+dotnet run --project src/Services/Product/Product.Api       # http://localhost:5251/swagger
+dotnet run --project src/Services/Identity/Identity.Api     # http://localhost:5402/swagger
+dotnet run --project src/Services/Inventory/Inventory.Api   # http://localhost:5102/swagger
+dotnet run --project src/Services/Alert/Alert.Api           # http://localhost:5212/swagger
+dotnet run --project src/Services/Reporting/Reporting.Api   # http://localhost:5312/swagger
+dotnet run --project src/Inventory.Web                      # http://localhost:5159
 ```
 
 ---
 
-## 9. Verifying the system end to end
+## 12. API Reference & Default Credentials
 
-1. Sign in as **manager**; create a category, two warehouses and a product (note its SKU and minimum
-   stock level).
-2. Sign in as **clerk**; receive 20 units, issue 5, transfer the rest to the second warehouse, and
-   adjust once.
-3. Check `/inventory/history` for the exact ledger rows, and `/alerts` as the quantity crosses the
-   minimum.
-4. Open the console in a second browser or profile — movements should appear there within a second,
-   without refreshing.
-5. Open the four reports and download one as CSV.
-6. In the RabbitMQ UI, confirm traffic on `inventory.events` and no messages in the `*.dead` queues.
+### Default Development Accounts
 
----
+| System | URL (Docker / K8s) | Username(s) | Password |
+| :--- | :--- | :--- | :--- |
+| **Inventory Web Console** | `http://localhost:5159` or `http://localhost/` | `manager`, `clerk`, `viewer` | `inventory-console-2026` |
+| **Grafana Observability** | `http://localhost:3000` or `http://localhost/grafana` | `admin` | `inventory-grafana-2026` |
+| **RabbitMQ Management** | `http://localhost:15672` | `inventory` | `inventory` |
 
-## 10. Troubleshooting
+### Microservice Endpoints Overview
 
-| Symptom | Likely cause | Where to look |
-|---------|--------------|---------------|
-| Console is up but screens show a service as unavailable | That service is still starting or has crashed | `docker compose logs <service>` and its `/health` |
-| Stock operation fails with `503 The Product service could not be reached` | `product-api` is not running | `docker compose ps` / logs |
-| Sign-in always rejects | Identity service down, or Production mode with seeding off and no accounts | Identity logs, `Identity:Seed:*` settings |
-| A queue stalls with old messages unhandled | A poison event | The `*.inventory.dead` queue in the RabbitMQ UI |
-| Live tables do not update | The relay lost its hub connection | Console logs (`StockRelay`); pages reconnect, or reload |
-| `409` on a stock operation | Two operators raced on the same row | Harmless — reload and retry |
-| A report is missing a movement just made | The projection has not caught up yet | Wait a moment; check RabbitMQ queue depth |
-
----
-
-## 11. Repository layout
-
-```
-InventorySystem.sln
-Dockerfile                  one recipe for all six apps (project chosen by build argument)
-docker-compose.yml          SQL Server + RabbitMQ + the six apps
-.env.example                template for passwords, environment and signing key
-src/
-  BuildingBlocks/
-    InventorySystem.BuildingBlocks.Contracts   integration events, RabbitMQ topology, serialization
-    InventorySystem.BuildingBlocks.Messaging   RabbitMQ publisher, consumer, connection plumbing
-    InventorySystem.BuildingBlocks.Security    shared JWT validation vocabulary
-  Services/
-    Product/     Product.Api / Application / Domain / Infrastructure
-    Inventory/   Inventory.Api / Application / Domain / Infrastructure
-    Alert/       Alert.Api / Application / Domain / Infrastructure
-    Reporting/   Reporting.Api / Application / Infrastructure
-    Identity/    Identity.Api / Application / Domain / Infrastructure
-  Inventory.Web/            the console: pages, design system, service clients, SignalR relay
-tests/                      *.Domain.Tests and *.Api.Tests per service, Inventory.Web.Tests,
-                            CrossService.Contracts.Tests
-docs/                       API references, architecture, development and UI guides
-```
-
----
-
-## 12. Glossary
-
-| Term | Meaning |
-|------|---------|
-| **Catalogue** | Reference data — products, categories, warehouses (owned by the Product service) |
-| **Stock level** | One product in one warehouse and its quantity |
-| **Ledger / history** | Append-only transaction rows: `RECEIVE`, `ISSUE`, `TRANSFER_IN`, `TRANSFER_OUT`, `ADJUSTMENT` |
-| **Movement** | Any ledger entry; a transfer produces two |
-| **Event** | The JSON announcement of a movement, published with a `stock.*` routing key |
-| **Outbox** | Events staged in the same transaction as the movement and published afterwards |
-| **Projection** | What Alert or Reporting derives from the events — not a copy of another service's table |
-| **Alert** | One low-stock *situation* at a warehouse, active until replenishment resolves it |
-| **Minimum stock level** | The per-product threshold that turns an alert on and off |
-| **Console** | `Inventory.Web`, the web app people work in |
-| **Relay** | The console's machine account that keeps the live view open for everyone signed in |
+| Service | Dev Port | Database | Core Endpoints |
+| :--- | :---: | :---: | :--- |
+| **Product API** | `5251` | `ProductDb` | `GET/POST/PUT/DELETE /api/products`, `/api/categories`, `/api/warehouses`, `GET /health` |
+| **Identity API** | `5402` | `IdentityDb` | `POST /api/auth/token`, `GET /api/auth/me`, `GET /api/users`, `GET /health` |
+| **Inventory API** | `5102` | `InventoryDb` | `GET /api/inventory`, `/api/inventory/history`, `POST /receive`, `/issue`, `/transfer`, `/adjust`, SignalR `/hubs/stock` |
+| **Alert API** | `5212` | `AlertDb` | `GET /api/alerts`, `GET /api/alerts/{id}`, `PUT /api/alerts/{id}/read`, `GET /health` |
+| **Reporting API** | `5312` | `ReportingDb` | `GET /api/reports/{inventory\|low-stock\|movement\|valuation}`, `GET /api/reports/{report}/export?format=csv\|xlsx` |
+| **Web Console** | `5159` | *(Stateless)* | `/`, `/sign-in`, `/products`, `/categories`, `/warehouses`, `/inventory/*`, `/alerts`, `/reports/*`, SignalR `/hubs/live` |

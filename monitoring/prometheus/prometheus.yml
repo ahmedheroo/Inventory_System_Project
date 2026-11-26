@@ -1,0 +1,74 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # RabbitMQ Prometheus plugin (/metrics/per-object includes node + per-queue/channel metrics)
+  - job_name: rabbitmq
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+
+  # HTTP health & latency probes across all six ASP.NET Core 8 applications
+  - job_name: inventory-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ["http://product-api:8080/health"]
+        labels:
+          service: product-api
+          role: api
+      - targets: ["http://identity-api:8080/health"]
+        labels:
+          service: identity-api
+          role: api
+      - targets: ["http://inventory-api:8080/health"]
+        labels:
+          service: inventory-api
+          role: api
+      - targets: ["http://alert-api:8080/health"]
+        labels:
+          service: alert-api
+          role: api
+      - targets: ["http://reporting-api:8080/health"]
+        labels:
+          service: reporting-api
+          role: api
+      - targets: ["http://console:8080/sign-in"]
+        labels:
+          service: console
+          role: web
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # TCP availability probes for SQL Server 2022 and RabbitMQ AMQP
+  - job_name: inventory-tcp
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets: ["sqlserver:1433"]
+        labels:
+          service: sqlserver
+          role: database
+      - targets: ["rabbitmq:5672"]
+        labels:
+          service: rabbitmq
+          role: broker
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

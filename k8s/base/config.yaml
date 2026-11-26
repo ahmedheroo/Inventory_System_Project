@@ -1,0 +1,17 @@
+# Settings every app shares. The overlays patch ASPNETCORE_ENVIRONMENT; anything secret lives in the
+# `inventory-secrets` Secret instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventory-config
+data:
+  ASPNETCORE_ENVIRONMENT: Development
+  Database__Provider: SqlServer
+  RabbitMq__HostName: rabbitmq
+  RabbitMq__Port: "5672"
+  RabbitMq__VirtualHost: /
+  Services__ProductApi__BaseUrl: http://product-api:8080
+  Services__InventoryApi__BaseUrl: http://inventory-api:8080
+  Services__AlertApi__BaseUrl: http://alert-api:8080
+  Services__ReportingApi__BaseUrl: http://reporting-api:8080
+  Services__IdentityApi__BaseUrl: http://identity-api:8080

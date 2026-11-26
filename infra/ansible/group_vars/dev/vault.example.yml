@@ -1,0 +1,21 @@
+# Copy to vault.yml in this folder, fill in, then encrypt before committing:
+#   ansible-vault encrypt group_vars/dev/vault.yml
+# The encrypted file is committed (Jenkins reads it with the `ansible-vault-pass` credential);
+# an unencrypted vault.yml must never be committed.
+#
+# Generate values with:  openssl rand -base64 36 | tr -d '/+='
+# Avoid ; ' and " in the SQL password: it is placed inside a connection string.
+# SQL Server and RabbitMQ only apply their password when their volume is first created.
+
+vault_mssql_sa_password: CHANGE_ME_Upper_lower_digit_1
+vault_rabbitmq_user: inventory
+vault_rabbitmq_password: CHANGE_ME
+# 32+ characters. In prod (ASPNETCORE_ENVIRONMENT=Production) Identity and Inventory refuse to start on
+# the development key published in appsettings.json.
+vault_jwt_signing_key: CHANGE_ME_at_least_32_characters_long
+# Password of the seeded staff accounts (manager, clerk, viewer), 12+ characters.
+vault_seed_user_password: CHANGE_ME_12_chars
+# Secret of the console's own relay account, 12+ characters; also given to the console as its client secret.
+vault_seed_service_secret: CHANGE_ME_12_chars
+# Admin password for Grafana at /grafana (optional; defaults to vault_seed_user_password if omitted).
+vault_grafana_admin_password: CHANGE_ME_12_chars

@@ -1,0 +1,6 @@
+# Only for a config change on an existing install; a fresh install already starts with the new config.
+- name: Restart k3s
+  ansible.builtin.systemd:
+    name: k3s
+    state: restarted
+  when: k3s_binary.stat.exists

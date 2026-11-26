@@ -1,0 +1,18 @@
+# Development environment (dev EC2). Development seeds the sample catalogue and turns Swagger on.
+# The image tag is not set here: the Ansible `deploy` role generates a release kustomization on top of
+# this overlay that pins every image to the tag Jenkins just pushed.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+labels:
+  - pairs:
+      app.kubernetes.io/environment: dev
+patches:
+  - target:
+      kind: ConfigMap
+      name: inventory-config
+    patch: |-
+      - op: replace
+        path: /data/ASPNETCORE_ENVIRONMENT
+        value: Development

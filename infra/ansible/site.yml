@@ -1,0 +1,20 @@
+# Configures both servers from scratch. Run once after creating the EC2s, and again after changing a role:
+#   ansible-playbook site.yml --ask-vault-pass
+- name: Base setup
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Docker and Jenkins (CI server, dev only)
+  hosts: dev
+  become: true
+  roles:
+    - docker
+    - jenkins
+
+- name: Kubernetes (k3s)
+  hosts: all
+  become: true
+  roles:
+    - k3s
